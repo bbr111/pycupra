@@ -1467,7 +1467,7 @@ class Vehicle:
     def is_secondary_drive_supported(self):
         if self.attrs.get('mycar', False):
             if 'engines' in self.attrs.get('mycar', {}):
-                if 'primary' in self.attrs.get('mycar')['engines']:
+                if 'secondary' in self.attrs.get('mycar')['engines']:
                     if 'fuelType' in self.attrs.get('mycar')['engines']['secondary']:
                         return True
         return False
