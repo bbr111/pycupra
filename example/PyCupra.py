@@ -296,7 +296,7 @@ async def main():
         connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE)
         print("Attempting to login to the Seat Cloud service")
         print(datetime.now())
-        if await connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH):
+        if await connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH, apiKey=credentials.get('apiKey',None)):
             print('Login or token refresh success!')
             print(datetime.now())
             print('Fetching user information for account.')

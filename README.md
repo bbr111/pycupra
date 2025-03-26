@@ -1,9 +1,10 @@
 # PyCupra
 
+A library to read and send vehicle data via Cupra/Seat portal using the same API calls as the MyCupra/MySeat mobile app.
+
 Fork of https://github.com/Farfar/seatconnect which in turn is a fork of:
 Fork of https://github.com/lendy007/skodaconnect which in turn is a fork of:
 https://github.com/robinostlund/volkswagencarnet
-A library to read and send vehicle data via Cupra/Seat portal using the same API calls as the MyCupra/MySeat mobile app.
 
 ## Information
 

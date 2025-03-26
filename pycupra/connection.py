@@ -220,6 +220,8 @@ class Connection:
         #self._session_nonce = self._getNonce()
         #self._session_state = self._getState()
 
+        if data.get('apiKey',None)!=None:
+            self._googleApiKey=data.get('apiKey')
         if data.get('tokenFile',None)!=None:
             self._tokenFile=data.get('tokenFile')
             loop = asyncio.get_running_loop()
@@ -1011,10 +1013,9 @@ class Connection:
                     'findCarResponse': response,
                     'isMoving': False
                 }
-                apiKeyForGoogle= 'AIzaSyBmSskEPdkfCQtscfd15qFhqa4WiaI4aOw'
+                apiKeyForGoogle= self._googleApiKey
                 lat= response.get('lat', 0)
                 lon= response.get('lon', 0)
-                test = eval(f"f'{API_POS_TO_ADDRESS}'")
                 response = await self.get(eval(f"f'{API_POS_TO_ADDRESS}'"))
                 if response.get('routes', []):
                     if response.get('routes', [])[0].get('legs', False):
