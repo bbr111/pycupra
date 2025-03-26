@@ -1013,13 +1013,14 @@ class Connection:
                     'findCarResponse': response,
                     'isMoving': False
                 }
-                apiKeyForGoogle= self._googleApiKey
-                lat= response.get('lat', 0)
-                lon= response.get('lon', 0)
-                response = await self.get(eval(f"f'{API_POS_TO_ADDRESS}'"))
-                if response.get('routes', []):
-                    if response.get('routes', [])[0].get('legs', False):
-                        data['findCarResponse']['position_to_address'] = response.get('routes', [])[0].get('legs',[])[0].get('start_address','')
+                if hasattr(self, '_googleApiKey'):
+                    apiKeyForGoogle= self._googleApiKey
+                    lat= response.get('lat', 0)
+                    lon= response.get('lon', 0)
+                    response = await self.get(eval(f"f'{API_POS_TO_ADDRESS}'"))
+                    if response.get('routes', []):
+                        if response.get('routes', [])[0].get('legs', False):
+                            data['findCarResponse']['position_to_address'] = response.get('routes', [])[0].get('legs',[])[0].get('start_address','')
                 return data
             elif response.get('status_code', {}):
                 if response.get('status_code', 0) == 204:
