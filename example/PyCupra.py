@@ -280,6 +280,31 @@ async def demo_show_last_honkandflash_info(vehicle):
         print("   No honk and flash request was found.")
     return timestamp
 
+async def demo_send_destination(vehicle):
+    print('########################################')
+    print('#      Send destination to vehicle     #')
+    print('########################################')
+    success= await vehicle.send_destination(                       
+        destination = {                                                 # Send destination address
+            "address": {                                                # address data optional
+                "city":"Weiterstadt",
+		        "country":"Germany",
+		        "stateAbbreviation":"Hessen",
+		        "street":"Max-Planck-Straße",
+		        "houseNumber":"3-5",
+		        "zipCode":"64331"
+            },
+	        "poiProvider":"google",                                     # poiProvider mandatory
+	        "geoCoordinate":{"latitude":49.89824,"longitude":8.59465},  # geoCoordinate mandatory
+	        "destinationName":"Seat/Cupra Deutschland"
+            }
+        )
+    if success:
+        print("   Request completed successfully.")
+    else:
+        print("   Request failed.")
+    return success
+
 
 async def main():
     """Main method."""
@@ -450,7 +475,7 @@ async def main():
             #await demo_set_lock(vehicle,action = "lock", 
             #                    spin = credentials.get('spin',''))                    # action = "unlock" or "lock". spin = SPIN, needed for both
 
-            #await vehicle.set_pheater(mode = "heating", spin = "1234")           # action = "heating", "ventilation" or "off". spin = SPIN, not needed for off
+            #await vehicle.set_pheater(mode = "heating", spin = "1234")                 # action = "heating", "ventilation" or "off". spin = SPIN, not needed for off
 
             #await demo_set_honkandflash(vehicle, action="flash")                     # action = "honkandflash" or "flash"
 
@@ -459,6 +484,8 @@ async def main():
             #print(f"Sleeping for {2*INTERVAL} seconds")
             #await asyncio.sleep(2*INTERVAL)
             #await demo_show_last_honkandflash_info(vehicle)                           # Returns the info of the last honkandflash_action
+
+            #await demo_send_destination(vehicle)                                       # arguments can be found in the demo function
 
             print(f"Sleeping for {5*INTERVAL} seconds")
             await asyncio.sleep(5*INTERVAL)
