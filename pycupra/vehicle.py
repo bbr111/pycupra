@@ -34,7 +34,6 @@ class Vehicle:
         self._capabilities = data.get('capabilities', [])
         self._specification = data.get('specification', {})
         self._properties = data.get('properties', {})
-        #self._apibase = 'https://msg.volkswagen.de'
         self._apibase = APP_URI
         self._secbase = 'https://msg.volkswagen.de'
         self._modelimages = None
@@ -63,7 +62,7 @@ class Vehicle:
             'tripStatistics': {'active': False, 'reason': 'not supported'},
             'vehicleHealthWarnings': {'active': False, 'reason': 'not supported'},
             'state': {'active': False, 'reason': 'not supported'},
-            'charging': {'active': True, 'reason': 'not supported'},
+            'charging': {'active': False, 'reason': 'not supported'},
             'honkAndFlash': {'active': False, 'reason': 'not supported'},
             'parkingPosition': {'active': False, 'reason': 'not supported'},
             'departureTimers': {'active': False, 'reason': 'not supported'},
@@ -104,7 +103,6 @@ class Vehicle:
         # Update vehicle information if not discovered or stale information
         if not self._discovered:
             await self.discover()
-            #_LOGGER.debug('Achtung! self.discover() auskommentiert')
         else:
             # Rediscover if data is older than 1 hour
             hourago = datetime.now() - timedelta(hours = 1)
@@ -148,7 +146,7 @@ class Vehicle:
 
     async def get_preheater(self):
         """Fetch pre-heater data if function is enabled."""
-        _LOGGER.error('get_preheater() not really implemented yet')
+        _LOGGER.info('get_preheater() not implemented yet')
         raise
         if self._relevantCapabilties.get('#dont know the name for the preheater capability', {}).get('active', False):
             if not await self.expired('rheating_v1'):
@@ -260,7 +258,6 @@ class Vehicle:
             if isinstance(value, int):
                 if 1 <= int(value) <= 255:
                     # VW-Group API charger current request
-                    #if self._services.get('rbatterycharge_v1', False) is not False:
                     if self._relevantCapabilties.get('charging', {}).get('active', False):
                         data = {'action': {'settings': {'maxChargeCurrentAC': int(value)}, 'type': 'setSettings'}}
                 else:
@@ -288,7 +285,6 @@ class Vehicle:
 
     async def set_charger(self, action, **data):
         """Charging actions."""
-        #if not self._services.get('rbatterycharge_v1', False) and not self._services.get('CHARGING', False):
         if not self._relevantCapabilties.get('charging', {}).get('active', False):
             _LOGGER.info('Remote start/stop of charger is not supported.')
             raise SeatInvalidRequestException('Remote start/stop of charger is not supported.')
@@ -365,7 +361,6 @@ class Vehicle:
             if isinstance(limit, int):
                 if limit in [0, 10, 20, 30, 40, 50]:
                     data['minSocPercentage'] = limit
-                    #'data['action'] = 'chargelimit'
                 else:
                     raise SeatInvalidRequestException(f'Charge limit must be one of 0, 10, 20, 30, 40 or 50.')
             else:
@@ -1809,7 +1804,7 @@ class Vehicle:
     @property
     def is_windows_closed_supported(self):
         """Return true if window state is supported"""
-        response = 0
+        response = ""
         if self.attrs.get('status', False):
             if 'windows' in self.attrs.get('status'):
                 response = self.attrs.get('status')['windows'].get('frontLeft', '')
@@ -1826,7 +1821,7 @@ class Vehicle:
     @property
     def is_window_closed_left_front_supported(self):
         """Return true if window state is supported"""
-        response = 0
+        response = ""
         if self.attrs.get('status', False):
             if 'windows' in self.attrs.get('status'):
                 response = self.attrs.get('status')['windows'].get('frontLeft', '')
@@ -1843,7 +1838,7 @@ class Vehicle:
     @property
     def is_window_closed_right_front_supported(self):
         """Return true if window state is supported"""
-        response = 0
+        response = ""
         if self.attrs.get('status', False):
             if 'windows' in self.attrs.get('status'):
                 response = self.attrs.get('status')['windows'].get('frontRight', '')
@@ -1860,7 +1855,7 @@ class Vehicle:
     @property
     def is_window_closed_left_back_supported(self):
         """Return true if window state is supported"""
-        response = 0
+        response = ""
         if self.attrs.get('status', False):
             if 'windows' in self.attrs.get('status'):
                 response = self.attrs.get('status')['windows'].get('rearLeft', '')
@@ -1877,7 +1872,7 @@ class Vehicle:
     @property
     def is_window_closed_right_back_supported(self):
         """Return true if window state is supported"""
-        response = 0
+        response = ""
         if self.attrs.get('status', False):
             if 'windows' in self.attrs.get('status'):
                 response = self.attrs.get('status')['windows'].get('rearRight', '')
@@ -1885,7 +1880,12 @@ class Vehicle:
 
     @property
     def sunroof_closed(self):
-        response = self.attrs.get('status')['sunroof'].get('open', '')
+        # Due to missing test objects, it is yet unclear, if 'sunroof' is direct subentry of 'status' or a subentry of 'windows'. So both are checked.
+        response = ""
+        if 'sunRoof' in self.attrs.get('status'):
+            response = self.attrs.get('status').get('sunRoof', '')
+        #else:
+        #    response = self.attrs.get('status')['windows'].get('sunRoof', '')
         if response == 'closed':
             return True
         else:
@@ -1894,11 +1894,14 @@ class Vehicle:
     @property
     def is_sunroof_closed_supported(self):
         """Return true if sunroof state is supported"""
-        response = 0
+        # Due to missing test objects, it is yet unclear, if 'sunroof' is direct subentry of 'status' or a subentry of 'windows'. So both are checked.
+        response = ""
         if self.attrs.get('status', False):
-            if 'sunroof' in self.attrs.get('status'):
-                response = self.attrs.get('status').get('sunroof', 0)
-        return True if response != 0 else False
+            if 'sunRoof' in self.attrs.get('status'):
+                response = self.attrs.get('status').get('sunRoof', '')
+            #elif 'sunRoof' in self.attrs.get('status')['windows']:
+            #    response = self.attrs.get('status')['windows'].get('sunRoof', '')
+        return True if response != '' else False
 
   # Locks
     @property
@@ -2037,17 +2040,11 @@ class Vehicle:
             try:
                 data = {}
                 timerdata = self.attrs.get('departureTimers', {}).get('timers', [])
-                #profiledata = self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
                 timer = timerdata[0]
-                #profile = profiledata[0]
                 timer.pop('timestamp', None)
                 timer.pop('timerID', None)
                 timer.pop('profileID', None)
-                #profile.pop('timestamp', None)
-                #profile.pop('profileName', None)
-                #profile.pop('profileID', None)
                 data.update(timer)
-                #data.update(profile)
                 return data
             except:
                 pass
@@ -2080,17 +2077,11 @@ class Vehicle:
             try:
                 data = {}
                 timerdata = self.attrs.get('departureTimers', {}).get('timers', [])
-                #profiledata = self.attrs.get('departuretimers', {}).get('timersAndProfiles', {}).get('timerProfileList', {}).get('timerProfile', [])
                 timer = timerdata[1]
-                #profile = profiledata[1]
                 timer.pop('timestamp', None)
                 timer.pop('timerID', None)
                 timer.pop('profileID', None)
-                #profile.pop('timestamp', None)
-                #profile.pop('profileName', None)
-                #profile.pop('profileID', None)
                 data.update(timer)
-                #data.update(profile)
                 return data
             except:
                 pass
@@ -2123,17 +2114,11 @@ class Vehicle:
             try:
                 data = {}
                 timerdata = self.attrs.get('departureTimers', {}).get('timers', [])
-                #profiledata = self.attrs.get('departuretimers', {}).get('timerProfile', [])
                 timer = timerdata[2]
-                #profile = profiledata[2]
                 timer.pop('timestamp', None)
                 timer.pop('timerID', None)
                 timer.pop('profileID', None)
-                #profile.pop('timestamp', None)
-                #profile.pop('profileName', None)
-                #profile.pop('profileID', None)
                 data.update(timer)
-                #data.update(profile)
                 return data
             except:
                 pass

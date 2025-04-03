@@ -27,4 +27,6 @@ When logged in the library will automatically create a vehicle object for every 
 Method get_vehicles will fetch vehicle basic information and create Vehicle class objects for all associated vehicles in account.
 To update all available data use the update_all method of the Connect class. This will call the update function for all registered vehicles, which in turn will fetch data from all available API endpoints.
 
+The file *cupra_credentials.json.demo* explains the data structure of the credentials file. 
+
 

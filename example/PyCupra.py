@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.DEBUG)
 _LOGGER = logging.getLogger(__name__)
 BRAND = 'cupra' # or 'seat' (Change it to 'seat' if you want to connect to the My Seat portal)
 
-PRINTRESPONSE = False
+PRINTRESPONSE = True
 INTERVAL = 5
 TOKEN_FILE_NAME_AND_PATH='./cupra_token.json'
 CREDENTIALS_FILE_NAME_AND_PATH='./cupra_credentials.json'
@@ -127,10 +127,10 @@ def readCredentialsFile():
         _LOGGER.info('readCredentialsFile not successful. Perhaps no credentials file present.')
         return None
 
-def exportToCSV(vehicle):
+def exportToCSV(vehicle, csvFileName):
     df= pd.DataFrame(vehicle._states['tripstatistics'])
     _LOGGER.debug('Exporting trip data to csv')
-    df.to_csv('c:/users/wulfgar/Documents/H-WM4567E/drivingData.csv')
+    df.to_csv(csvFileName)
     return True
 
 async def demo_set_charger(vehicle, action="start"):
@@ -452,11 +452,17 @@ async def main():
             print(txt.center(40, '#'))
             await vehicle.get_trip_statistic()
             print('')
-            print('Updates complete')
-            exportToCSV(vehicle)
+            print('Updates complete')"""
+
+            print('########################################')
+            print('#     Export driving data to csv       #')
+            print(txt.center(40, '#'))
+            exportToCSV(vehicle, credentials.get('csvFileName','./drivingData.csv'))
+            print('')
+            print('Export of driving data to csv complete')
 
             print(f"Sleeping for {INTERVAL} seconds")
-            await asyncio.sleep(INTERVAL)"""
+            await asyncio.sleep(INTERVAL)
             
             # Examples for using set functions:
 
