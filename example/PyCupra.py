@@ -100,6 +100,15 @@ RESOURCES = [
 		"trip_last_length",
 		"trip_last_recuperation",
 		"trip_last_total_electric_consumption",
+		"trip_last_cycle_average_auxillary_consumption",
+		"trip_last_cycle_average_electric_consumption",
+		"trip_last_cycle_average_fuel_consumption",
+		"trip_last_cycle_average_speed",
+		"trip_last_cycle_duration",
+		"trip_last_cycle_entry",
+		"trip_last_cycle_length",
+		"trip_last_cycle_recuperation",
+		"trip_last_cycle_total_electric_consumption",
 		"trunk_closed",
 		"trunk_locked",
 		"vehicle_moving",
@@ -127,8 +136,8 @@ def readCredentialsFile():
         _LOGGER.info('readCredentialsFile not successful. Perhaps no credentials file present.')
         return None
 
-def exportToCSV(vehicle, csvFileName):
-    df= pd.DataFrame(vehicle._states['tripstatistics'])
+def exportToCSV(vehicle, csvFileName, dataType='short'):
+    df= pd.DataFrame(vehicle._states['tripstatistics'][dataType])
     _LOGGER.debug('Exporting trip data to csv')
     df.to_csv(csvFileName)
     return True
@@ -457,7 +466,7 @@ async def main():
             print('########################################')
             print('#     Export driving data to csv       #')
             print(txt.center(40, '#'))
-            exportToCSV(vehicle, credentials.get('csvFileName','./drivingData.csv'))
+            exportToCSV(vehicle, credentials.get('csvFileName','./drivingData.csv'), 'short') # possible value: short/cyclic
             print('')
             print('Export of driving data to csv complete')
 
