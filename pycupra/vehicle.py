@@ -1332,15 +1332,15 @@ class Vehicle:
         """Return true if external power is connected."""
         response = ''
         if self.attrs.get('charging', False):
-            response = self.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('plug', {}).get('externalPower', '')
+            response = self.attrs.get('charging', {}).get('status', {}).get('plug', {}).get('externalPower', '')
         else:
             response = ''
-        return True if response in ['stationConnected', 'available', 'Charging'] else False
+        return True if response in ['stationConnected', 'available', 'Charging', 'ready'] else False
 
     @property
     def is_external_power_supported(self):
         """External power supported."""
-        if self.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('plug, {}').get('externalPower', False):
+        if self.attrs.get('charging', {}).get('status', {}).get('plug, {}').get('externalPower', False):
             return True
 
     @property
