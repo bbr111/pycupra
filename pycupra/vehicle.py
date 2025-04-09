@@ -1075,7 +1075,7 @@ class Vehicle:
             last_connected = last_connected_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
         else:
             last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc).astimezone(tz=None)
-        return last_connected.strftime('%Y-%m-%d %H:%M:%S')
+        return last_connected #.strftime('%Y-%m-%d %H:%M:%S')
 
     @property
     def is_last_connected_supported(self):
@@ -1282,13 +1282,15 @@ class Vehicle:
                 minutes = int(self.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('remainingTimeInMinutes', 0))
             else:
                 minutes = 0
-            try:
-                if minutes == -1: return '00:00'
-                if minutes == 65535: return '00:00'
-                return "%02d:%02d" % divmod(minutes, 60)
-            except Exception:
-                pass
-        return '00:00'
+            return minutes
+            #try:
+            #    if minutes == -1: return '00:00'
+            #    if minutes == 65535: return '00:00'
+            #    return "%02d:%02d" % divmod(minutes, 60)
+            #except Exception:
+            #    pass
+        #return '00:00'
+        return 0
 
     @property
     def is_charging_time_left_supported(self):

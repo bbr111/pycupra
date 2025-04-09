@@ -86,10 +86,10 @@ class Sensor(Instrument):
             elif "km/h" == self.unit:
                 self.unit = "mi/h"
                 self.convert = True
-            elif "l/100 km" == self.unit:
+            elif "l/100km" == self.unit:
                 self.unit = "l/100 mi"
                 self.convert = True
-            elif "kWh/100 km" == self.unit:
+            elif "kWh/100km" == self.unit:
                 self.unit = "kWh/100 mi"
                 self.convert = True
         elif self.unit and config.get('scandinavian_miles', False) is True:
@@ -97,9 +97,9 @@ class Sensor(Instrument):
                 self.unit = "mil"
             elif "km/h" == self.unit:
                 self.unit = "mil/h"
-            elif "l/100 km" == self.unit:
+            elif "l/100km" == self.unit:
                 self.unit = "l/100 mil"
-            elif "kWh/100 km" == self.unit:
+            elif "kWh/100km" == self.unit:
                 self.unit = "kWh/100 mil"
 
         # Init placeholder for parking heater duration
@@ -843,6 +843,7 @@ def create_instruments():
             name="Odometer",
             icon="mdi:speedometer",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="battery_level",
@@ -863,6 +864,7 @@ def create_instruments():
             name="Adblue level",
             icon="mdi:fuel",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="fuel_level",
@@ -881,6 +883,7 @@ def create_instruments():
             name="Service inspection distance",
             icon="mdi:garage",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="oil_inspection",
@@ -893,6 +896,7 @@ def create_instruments():
             name="Oil inspection distance",
             icon="mdi:oil",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="last_connected",
@@ -910,7 +914,8 @@ def create_instruments():
             attr="charging_time_left",
             name="Charging time left",
             icon="mdi:battery-charging-100",
-            unit="h",
+            unit="min",
+            device_class="duration"
         ),
         Sensor(
             attr="charging_power",
@@ -923,25 +928,29 @@ def create_instruments():
             attr="charge_rate",
             name="Charging rate",
             icon="mdi:battery-heart",
-            unit="km/h"
+            unit="km/h",
+            device_class="speed"
         ),
         Sensor(
             attr="electric_range",
             name="Electric range",
             icon="mdi:car-electric",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="combustion_range",
             name="Combustion range",
             icon="mdi:car",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="combined_range",
             name="Combined range",
             icon="mdi:car",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="charge_max_ampere",
@@ -962,126 +971,145 @@ def create_instruments():
             name="Climatisation time left",
             icon="mdi:clock",
             unit="h",
+            device_class="duration"
         ),
         Sensor(
             attr="trip_last_average_speed",
             name="Last trip average speed",
             icon="mdi:speedometer",
             unit="km/h",
+            device_class="speed"
         ),
         Sensor(
             attr="trip_last_average_electric_consumption",
             name="Last trip average electric consumption",
             icon="mdi:car-battery",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_average_fuel_consumption",
             name="Last trip average fuel consumption",
             icon="mdi:fuel",
-            unit="l/100 km",
+            unit="l/100km",
         ),
         Sensor(
             attr="trip_last_duration",
             name="Last trip duration",
             icon="mdi:clock",
             unit="min",
+            device_class="duration"
         ),
         Sensor(
             attr="trip_last_length",
             name="Last trip length",
             icon="mdi:map-marker-distance",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="trip_last_recuperation",
             name="Last trip recuperation",
             icon="mdi:battery-plus",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_average_recuperation",
             name="Last trip average recuperation",
             icon="mdi:battery-plus",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_average_auxillary_consumption",
             name="Last trip average auxillary consumption",
             icon="mdi:flash",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_average_aux_consumer_consumption",
             name="Last trip average auxillary consumer consumption",
             icon="mdi:flash",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_total_electric_consumption",
             name="Last trip total electric consumption",
             icon="mdi:car-battery",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_cycle_average_speed",
             name="Last cycle average speed",
             icon="mdi:speedometer",
             unit="km/h",
+            device_class="speed"
         ),
         Sensor(
             attr="trip_last_cycle_average_electric_consumption",
             name="Last cycle_average electric consumption",
             icon="mdi:car-battery",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_cycle_average_fuel_consumption",
             name="Last cycle average fuel consumption",
             icon="mdi:fuel",
-            unit="l/100 km",
+            unit="l/100km",
         ),
         Sensor(
             attr="trip_last_cycle_average_auxillary_consumption",
             name="Last cycle average auxillary consumption",
             icon="mdi:flash",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_cycle_duration",
             name="Last cycle duration",
             icon="mdi:clock",
             unit="min",
+            device_class="duration"
         ),
         Sensor(
             attr="trip_last_cycle_length",
             name="Last cycle length",
             icon="mdi:map-marker-distance",
             unit="km",
+            device_class="distance"
         ),
         Sensor(
             attr="trip_last_cycle_recuperation",
             name="Last cycle recuperation",
             icon="mdi:battery-plus",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_cycle_average_recuperation",
             name="Last cycle average recuperation",
             icon="mdi:battery-plus",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_cycle_average_aux_consumer_consumption",
             name="Last cycle average auxillary consumer consumption",
             icon="mdi:flash",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_cycle_total_electric_consumption",
             name="Last cycle total electric consumption",
             icon="mdi:car-battery",
-            unit="kWh/100 km",
+            unit="kWh/100km",
+            device_class="energy_distance"
         ),
         Sensor(
             attr="model_image_large",
@@ -1103,6 +1131,7 @@ def create_instruments():
             name="Parking Heater heating/ventilation duration",
             icon="mdi:timer",
             unit="minutes",
+            device_class="duration"
         ),
         Sensor(
             attr="outside_temperature",
