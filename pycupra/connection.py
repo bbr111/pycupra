@@ -153,6 +153,7 @@ class Connection:
             if os.path.isfile(self._tokenFile):
                 with open(self._tokenFile, "r") as f:
                     tokenString=f.read()
+                f.close()
                 tokens=json.loads(tokenString)
                 self._session_tokens[brand]=tokens
                 self._user_id=tokens['user_id']
@@ -171,6 +172,7 @@ class Connection:
         try:
             with open(self._tokenFile, "w") as f:
                 f.write(json.dumps(self._session_tokens[brand]))
+            f.close()
             return True
         except Exception as e:
             _LOGGER.warning(f'writeTokenFile() not successful. Error: {e}')
@@ -193,6 +195,7 @@ class Connection:
             with open(f'./www/image_{imageName}.png', "wb") as f:
                 f.write(imageData)
             imageDict[imageName]=f'/local/image_{imageName}.png'
+            f.close()
             return True
         except:
             _LOGGER.warning('writeImageFile() not successful. Ignoring this problem.')

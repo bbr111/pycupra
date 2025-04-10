@@ -711,8 +711,8 @@ class DepartureTimer1(Switch):
 
     @property
     def state(self):
-        status = self.vehicle.departure1.get("timerProgrammedStatus", "")
-        if status == "programmed":
+        status = self.vehicle.departure1.get("enabled", "")
+        if status:
             return True
         else:
             return False
@@ -743,8 +743,8 @@ class DepartureTimer2(Switch):
 
     @property
     def state(self):
-        status = self.vehicle.departure2.get("timerProgrammedStatus", "")
-        if status == "programmed":
+        status = self.vehicle.departure2.get("enabled", "")
+        if status:
             return True
         else:
             return False
@@ -774,8 +774,8 @@ class DepartureTimer3(Switch):
 
     @property
     def state(self):
-        status = self.vehicle.departure3.get("timerProgrammedStatus", "")
-        if status == "programmed":
+        status = self.vehicle.departure3.get("enabled", "")
+        if status:
             return True
         else:
             return False

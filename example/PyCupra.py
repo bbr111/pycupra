@@ -28,6 +28,7 @@ PRINTRESPONSE = True
 INTERVAL = 5
 TOKEN_FILE_NAME_AND_PATH='./cupra_token.json'
 CREDENTIALS_FILE_NAME_AND_PATH='./cupra_credentials.json'
+ALL_ATTRIBUTES_FILE_NAME_AND_PATH='./cupra_all_attributes.txt'
 
 
 COMPONENTS = {
@@ -141,6 +142,16 @@ def exportToCSV(vehicle, csvFileName, dataType='short'):
     _LOGGER.debug('Exporting trip data to csv')
     df.to_csv(csvFileName)
     return True
+
+def exportAllAttributes(vehicle, exportFileName):
+    try:
+        with open(exportFileName, "w") as f:
+            print(vehicle.attrs, file=f)
+        f.close()
+        return True
+    except Exception as e:
+        _LOGGER.warning(f'exportAllAttributes() not successful. Error: {e}')
+    return False
 
 async def demo_set_charger(vehicle, action="start"):
     print('########################################')
@@ -461,8 +472,11 @@ async def main():
             print(txt.center(40, '#'))
             await vehicle.get_trip_statistic()
             print('')
-            print('Updates complete')"""
+            print('Updates complete')
 
+            print(f"Sleeping for {INTERVAL} seconds")
+            await asyncio.sleep(INTERVAL)"""
+            
             print('########################################')
             print('#     Export driving data to csv       #')
             print(txt.center(40, '#'))
@@ -470,9 +484,6 @@ async def main():
             print('')
             print('Export of driving data to csv complete')
 
-            print(f"Sleeping for {INTERVAL} seconds")
-            await asyncio.sleep(INTERVAL)
-            
             # Examples for using set functions:
 
             #await demo_set_charger(vehicle, action = "start")                        # action = "start" or "stop"
@@ -502,8 +513,18 @@ async def main():
 
             #await demo_send_destination(vehicle)                                       # arguments can be found in the demo function
 
-            print(f"Sleeping for {5*INTERVAL} seconds")
-            await asyncio.sleep(5*INTERVAL)
+            print('########################################')
+            print('#    Export all attributes to file    #')
+            print(txt.center(40, '#'))
+            rc= exportAllAttributes(vehicle, ALL_ATTRIBUTES_FILE_NAME_AND_PATH)
+            print('')
+            if rc:
+                print('Export of all attributes successfully completed')
+            else:
+                print('Export of all attributes failed')
+            
+            print(f"Sleeping for {INTERVAL} seconds")
+            await asyncio.sleep(INTERVAL)
 
     exit
 
