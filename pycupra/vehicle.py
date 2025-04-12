@@ -122,7 +122,7 @@ class Vehicle:
                     self.get_charger(),
                     self.get_timerprogramming(),
                     self.get_basiccardata(),
-                    self.get_modelimageurl(),
+                    #self.get_modelimageurl(), #commented out because getting the images once in discover() should be sufficient
                     return_exceptions=True
                 )
             except:
@@ -147,16 +147,15 @@ class Vehicle:
     async def get_preheater(self):
         """Fetch pre-heater data if function is enabled."""
         _LOGGER.info('get_preheater() not implemented yet')
-        raise
-        if self._relevantCapabilties.get('#dont know the name for the preheater capability', {}).get('active', False):
-            if not await self.expired('rheating_v1'):
-                data = await self._connection.getPreHeater(self.vin, self._apibase)
-                if data:
-                    self._states.update(data)
-                else:
-                    _LOGGER.debug('Could not fetch preheater data')
-        else:
-            self._requests.pop('preheater', None)
+        #if self._relevantCapabilties.get('#dont know the name for the preheater capability', {}).get('active', False):
+        #    if not await self.expired('rheating_v1'):
+        #        data = await self._connection.getPreHeater(self.vin, self._apibase)
+        #        if data:
+        #            self._states.update(data)
+        #        else:
+        #            _LOGGER.debug('Could not fetch preheater data')
+        #else:
+        #    self._requests.pop('preheater', None)
 
     async def get_climater(self):
         """Fetch climater data if function is enabled."""
@@ -913,7 +912,7 @@ class Vehicle:
             if expired > timestamp:
                 self._requests.get('refresh', {}).pop('id')
             else:
-                raise SeatRequestInProgressException('A data refresh request is already in progress')
+                raise SeatRequestInProgressException('Last data refresh request less than 3 minutes ago')
         try:
             self._requests['latest'] = 'Refresh'
             response = await self._connection.setRefresh(self.vin, self._apibase)
@@ -1028,18 +1027,19 @@ class Vehicle:
     @property
     def model_image_small(self):
         """Return URL for model image"""
-        return self._modelimages.get('images','').get('front','')
+        return self._modelimages.get('images','').get('front_cropped','')
 
     @property
     def is_model_image_small_supported(self):
         """Return true if model image url is not None."""
         if self._modelimages is not None:
-            return True
+            if self._modelimages.get('images','').get('front_cropped','')!='':
+                return True
 
     @property
     def model_image_large(self):
         """Return URL for model image"""
-        return self._modelimages.get('images','').get('side', '')
+        return self._modelimages.get('images','').get('front', '')
 
     @property
     def is_model_image_large_supported(self):
@@ -2452,11 +2452,12 @@ class Vehicle:
     @property
     def refresh_data(self):
         """Get state of data refresh"""
-        if self._requests.get('refresh', {}).get('id', False):
-            timestamp = self._requests.get('refresh', {}).get('timestamp', DATEZERO)
-            expired = datetime.now() - timedelta(minutes=2)
-            if expired < timestamp:
-                return True
+        #if self._requests.get('refresh', {}).get('id', False):
+        #    timestamp = self._requests.get('refresh', {}).get('timestamp', DATEZERO)
+        #    expired = datetime.now() - timedelta(minutes=2)
+        #    if expired < timestamp:
+        #        return True
+        #State is always false
         return False
 
     @property

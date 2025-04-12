@@ -15,6 +15,8 @@ import string
 import secrets
 import xmltodict
 
+from PIL import Image
+from io import BytesIO
 from sys import version_info, argv
 from datetime import timedelta, datetime, timezone
 from urllib.parse import urljoin, parse_qs, urlparse, urlencode
@@ -940,6 +942,26 @@ class Connection:
                             if len(pic)>0:
                                 loop = asyncio.get_running_loop()
                                 await loop.run_in_executor(None, self.writeImageFile, pos,pic, images)
+                            if pos=='front':
+                                # Crop the front image to a square format
+                                try:
+                                    im= Image.open(BytesIO(pic))
+                                    width, height = im.size
+                                    if height>width:
+                                        width, height = height, width
+                                    # Setting the points for cropped image
+                                    left = (width-height)/2
+                                    top = 0
+                                    right = height+(width-height)/2
+                                    bottom = height
+                                    # Cropped image of above dimension
+                                    im1 = im.crop((left, top, right, bottom))
+                                    byteIO = BytesIO()
+                                    im1.save(byteIO, format='PNG')
+                                    await loop.run_in_executor(None, self.writeImageFile, pos+'_cropped',byteIO.getvalue(), images)
+                                except:
+                                    _LOGGER.warning('Cropping front image to square format failed.')
+ 
                     _LOGGER.debug('Read images from web site and wrote them to file.')
                     response['images']=images
                     return response
