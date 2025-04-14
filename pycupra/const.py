@@ -133,6 +133,7 @@ API_CHARGING = '{baseurl}/v1/vehicles/{vin}/charging'                           
 API_CLIMATER_STATUS = '{baseurl}/v1/vehicles/{vin}/climatisation/status'                             # Climatisation data
 API_CLIMATER = '{baseurl}/v2/vehicles/{vin}/climatisation'                         # Climatisation data
 API_DEPARTURE_TIMERS = '{baseurl}/v1/vehicles/{vin}/departure-timers'                                 # Departure timers
+API_DEPARTURE_PROFILES = '{baseurl}/v1/vehicles/{vin}/departure/profiles'                             # Departure profiles
 API_POSITION = '{baseurl}/v1/vehicles/{vin}/parkingposition'                                         # Position data
 API_POS_TO_ADDRESS= 'https://maps.googleapis.com/maps/api/directions/json?origin={lat},{lon}&destination={lat},{lon}&traffic_model=best_guess&departure_time=now&language=de&key={apiKeyForGoogle}&mode=driving'
 API_TRIP = '{baseurl}/v1/vehicles/{vin}/driving-data/{dataType}?from=1970-01-01T00:00:00Z&to=2099-12-31T09:59:01Z' # Trip statistics (whole history) SHORT/LONG/CYCLIC (WEEK only with from)

@@ -5,6 +5,7 @@ import re
 import logging
 import asyncio
 
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from json import dumps as to_json
 from collections import OrderedDict
@@ -43,6 +44,7 @@ class Vehicle:
 
         self._requests = {
             'departuretimer': {'status': '', 'timestamp': DATEZERO},
+            'departureprofile': {'status': '', 'timestamp': DATEZERO},
             'batterycharge': {'status': '', 'timestamp': DATEZERO},
             'climatisation': {'status': '', 'timestamp': DATEZERO},
             'refresh': {'status': '', 'timestamp': DATEZERO},
@@ -56,16 +58,18 @@ class Vehicle:
         self._climate_duration = 30
 
         self._relevantCapabilties = {
-            'measurements': {'active': False, 'reason': 'not supported'},
+            'measurements': {'active': False, 'reason': 'not supported', },
             'climatisation': {'active': False, 'reason': 'not supported'},
             #'parkingInformation': {'active': False, 'reason': 'not supported'},
-            'tripStatistics': {'active': False, 'reason': 'not supported'},
+            'tripStatistics': {'active': False, 'reason': 'not supported', 'supportsCyclicTrips': False},
+            'vehicleHealthInspection': {'active': False, 'reason': 'not supported'},
             'vehicleHealthWarnings': {'active': False, 'reason': 'not supported'},
             'state': {'active': False, 'reason': 'not supported'},
-            'charging': {'active': False, 'reason': 'not supported'},
+            'charging': {'active': False, 'reason': 'not supported', 'supportsTargetStateOfCharge': False},
             'honkAndFlash': {'active': False, 'reason': 'not supported'},
             'parkingPosition': {'active': False, 'reason': 'not supported'},
-            'departureTimers': {'active': False, 'reason': 'not supported'},
+            'departureTimers': {'active': False, 'reason': 'not supported', 'supportsSingleTimer': False},
+            'departureProfiles': {'active': False, 'reason': 'not supported', 'supportsSingleTimer': False},
             'transactionHistoryLockUnlock': {'active': False, 'reason': 'not supported'},
             'transactionHistoryHonkFlash': {'active': False, 'reason': 'not supported'},
         }
@@ -90,11 +94,19 @@ class Vehicle:
                     data['reason']=capa.get('user-enabled', False)
                 if capa.get('status', False):
                     data['reason']=capa.get('status', '')
+                if capa.get('parameters', False):
+                    if capa['parameters'].get('supportsCyclicTrips',False)==True or capa['parameters'].get('supportsCyclicTrips',False)=='true':
+                        data['supportsCyclicTrips']=True
+                    if capa['parameters'].get('supportsTargetStateOfCharge',False)==True or capa['parameters'].get('supportsTargetStateOfCharge',False)=='true':
+                        data['supportsTargetStateOfCharge']=True
+                    if capa['parameters'].get('supportsSingleTimer',False)==True or capa['parameters'].get('supportsSingleTimer',False)=='true':
+                        data['supportsSingleTimer']=True
                 self._relevantCapabilties[id].update(data)
                 
 
-         # Get URLs for model image
-        self._modelimages = await self.get_modelimageurl()
+        await self.get_trip_statistic(),
+        # Get URLs for model image
+        self._modelimages = await self.get_modelimageurl(),
 
         self._discovered = datetime.now()
 
@@ -104,11 +116,11 @@ class Vehicle:
         if not self._discovered:
             await self.discover()
         else:
-            # Rediscover if data is older than 1 hour
-            hourago = datetime.now() - timedelta(hours = 1)
+            # Rediscover if data is older than 2 hours
+            hourago = datetime.now() - timedelta(hours = 2)
             if self._discovered < hourago:
-                #await self.discover()
-                _LOGGER.debug('Achtung! self.discover() auskommentiert')
+                await self.discover()
+                #_LOGGER.debug('Achtung! self.discover() auskommentiert')
 
         # Fetch all data if car is not deactivated
         if not self.deactivated:
@@ -116,13 +128,15 @@ class Vehicle:
                 await asyncio.gather(
                     self.get_preheater(),
                     self.get_climater(),
-                    self.get_trip_statistic(),
+                    #self.get_trip_statistic(), # commented out, because getting the trip statistic in discover() should be sufficient
                     self.get_position(),
                     self.get_statusreport(),
+                    self.get_vehicleHealthWarnings(),
                     self.get_charger(),
-                    self.get_timerprogramming(),
+                    self.get_departure_timers(),
+                    self.get_departure_profiles(),
                     self.get_basiccardata(),
-                    #self.get_modelimageurl(), #commented out because getting the images once in discover() should be sufficient
+                    #self.get_modelimageurl(), #commented out, because getting the images discover() should be sufficient
                     return_exceptions=True
                 )
             except:
@@ -171,7 +185,7 @@ class Vehicle:
     async def get_trip_statistic(self):
         """Fetch trip data if function is enabled."""
         if self._relevantCapabilties.get('tripStatistics', {}).get('active', False):
-            data = await self._connection.getTripStatistics(self.vin, self._apibase)
+            data = await self._connection.getTripStatistics(self.vin, self._apibase, self._relevantCapabilties['tripStatistics'].get('supportsCyclicTrips', False))
             if data:
                 self._states.update(data)
             else:
@@ -195,6 +209,14 @@ class Vehicle:
             else:
                 _LOGGER.debug('Could not fetch any positional data')
 
+    async def get_vehicleHealthWarnings(self):
+        if self._relevantCapabilties.get('vehicleHealthWarnings', {}).get('active', False):
+            data = await self._connection.getVehicleHealthWarnings(self.vin, self._apibase)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch vehicle health warnings')
+
     async def get_statusreport(self):
         """Fetch status data if function is enabled."""
         if self._relevantCapabilties.get('state', {}).get('active', False):
@@ -203,7 +225,7 @@ class Vehicle:
                 self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch status report')
-        if self._relevantCapabilties.get('vehicleHealthWarnings', {}).get('active', False):
+        if self._relevantCapabilties.get('vehicleHealthInspection', {}).get('active', False):
             data = await self._connection.getMaintenance(self.vin, self._apibase)
             if data:
                 self._states.update(data)
@@ -219,10 +241,19 @@ class Vehicle:
             else:
                 _LOGGER.debug('Could not fetch charger data')
 
-    async def get_timerprogramming(self):
+    async def get_departure_timers(self):
         """Fetch timer data if function is enabled."""
         if self._relevantCapabilties.get('departureTimers', {}).get('active', False):
             data = await self._connection.getDeparturetimer(self.vin, self._apibase)
+            if data:
+                self._states.update(data)
+            else:
+                _LOGGER.debug('Could not fetch timers')
+
+    async def get_departure_profiles(self):
+        """Fetch timer data if function is enabled."""
+        if self._relevantCapabilties.get('departureProfiles', {}).get('active', False):
+            data = await self._connection.getDepartureprofiles(self.vin, self._apibase)
             if data:
                 self._states.update(data)
             else:
@@ -321,8 +352,8 @@ class Vehicle:
                 # Update the charger data and check, if they have changed as expected
                 retry = 0
                 actionSuccessful = False
-                while not actionSuccessful and retry < 3:
-                    await asyncio.sleep(5)
+                while not actionSuccessful and retry < 2:
+                    await asyncio.sleep(15)
                     await self.get_charger()
                     if mode == 'start':
                         if self.charging:
@@ -338,6 +369,7 @@ class Vehicle:
                         raise
                     retry = retry +1
                 if actionSuccessful:
+                    _LOGGER.debug('POST request for charger successful. New status as expected.')
                     self._requests.get('batterycharge', {}).pop('id')
                     return True
                 _LOGGER.error('Response to POST request seemed successful but the charging status did not change as expected.')
@@ -351,12 +383,15 @@ class Vehicle:
 
    # API endpoint departuretimer
     async def set_charge_limit(self, limit=50):
-        """ Set charging limit. """
-        if not self._relevantCapabilties.get('departureTimers', {}).get('active', False) and not self._relevantCapabilties.get('charging', {}).get('active', False):
+        """ Set minimum state of charge limit for departure timers or departure profiles. """
+        if (not self._relevantCapabilties.get('departureTimers', {}).get('active', False) and 
+            not self._relevantCapabilties.get('departureProfiles', {}).get('active', False) and 
+            not self._relevantCapabilties.get('charging', {}).get('active', False)):
             _LOGGER.info('Set charging limit is not supported.')
             raise SeatInvalidRequestException('Set charging limit is not supported.')
-        data = {}
-        if self._relevantCapabilties.get('departureTimers', {}).get('active', False):
+        if self._relevantCapabilties.get('departureTimers', {}).get('active', False) :
+            # Vehicle has departure timers
+            data = {}
             if isinstance(limit, int):
                 if limit in [0, 10, 20, 30, 40, 50]:
                     data['minSocPercentage'] = limit
@@ -365,13 +400,24 @@ class Vehicle:
             else:
                 raise SeatInvalidRequestException(f'Charge limit "{limit}" is not supported.')
             return await self._set_timers(data)
+        elif self._relevantCapabilties.get('departureProfiles', {}).get('active', False):
+            # Vehicle has departure profiles
+            data= deepcopy(self.attrs.get('departureProfiles'))
+            if isinstance(limit, int):
+                if limit in [0, 10, 20, 30, 40, 50]:
+                    data['minSocPercentage'] = limit
+                else:
+                    raise SeatInvalidRequestException(f'Charge limit must be one of 0, 10, 20, 30, 40 or 50.')
+            else:
+                raise SeatInvalidRequestException(f'Charge limit "{limit}" is not supported.')
+            return await self._set_departure_profiles(data, action='minSocPercentage')
 
     async def set_timer_active(self, id=1, action='off'):
         """ Activate/deactivate departure timers. """
         data = {}
-        supported = 'is_departure' + str(id) + "_supported"
+        supported = "is_departure" + str(id) + "_supported"
         if getattr(self, supported) is not True:
-            raise SeatConfigException(f'This vehicle does not support timer id "{id}".')
+            raise SeatConfigException(f'This vehicle does not support timer id {id}.')
         if self._relevantCapabilties.get('departureTimers', {}).get('active', False):
             allTimers= self.attrs.get('departureTimers').get('timers', [])
             for singleTimer in allTimers:
@@ -389,7 +435,7 @@ class Vehicle:
                     else:
                         raise SeatInvalidRequestException(f'Timer action "{action}" is not supported.')
                     return await self._set_timers(data)
-            raise SeatInvalidRequestException(f'Departure timers id {id} not found.')
+            raise SeatInvalidRequestException(f'Departure timer id {id} not found.')
         else:
             raise SeatInvalidRequestException('Departure timers are not supported.')
 
@@ -397,9 +443,9 @@ class Vehicle:
         """ Set departure schedules. """
         data = {}
         # Validate required user inputs
-        supported = 'is_departure' + str(id) + "_supported"
+        supported = "is_departure" + str(id) + "_supported"
         if getattr(self, supported) is not True:
-            raise SeatConfigException(f'Timer id "{id}" is not supported for this vehicle.')
+            raise SeatConfigException(f'Timer id {id} is not supported for this vehicle.')
         else:
             _LOGGER.debug(f'Timer id {id} is supported')
         if not schedule:
@@ -461,6 +507,8 @@ class Vehicle:
                 else:
                     raise SeatInvalidRequestException('Invalid type for charge max current variable')
             
+            # Prepare data and execute
+            data['id'] = id
             # Converting schedule to data map
             if schedule.get("enabled",False):
                 data['enabled']=True
@@ -484,7 +532,7 @@ class Vehicle:
             else:
                 preferedChargingTimes= [{
                     "id" : 1,
-                    "enabled" : True,
+                    "enabled" : False,
                     "startTimeLocal" : "00:00",
                     "endTimeLocal" : "00:00"
                     }]
@@ -499,7 +547,7 @@ class Vehicle:
                         "fridays":(schedule.get('days',"nnnnnnn")[4]=='y'),
                         "saturdays":(schedule.get('days',"nnnnnnn")[5]=='y'),
                         "sundays":(schedule.get('days',"nnnnnnn")[6]=='y'),
-                        "preferredChargingTimes": preferedChargingTimes
+                        #"preferredChargingTimes": preferedChargingTimes
                     }
                 }
             else:
@@ -507,11 +555,10 @@ class Vehicle:
                 _LOGGER.info(f'startDateTime={startDateTime.isoformat()}')
                 data['singleTimer']= {
                     "startDateTimeLocal": startDateTime.isoformat(),
-                    "preferredChargingTimes": preferedChargingTimes
+                    #"preferredChargingTimes": preferedChargingTimes
                     }
+            data["preferredChargingTimes"]= preferedChargingTimes
                 
-            # Prepare data and execute
-            data['id'] = id
             # Now we have to embed the data for the timer 'id' in timers[]
             data={
                 'timers' : [data]
@@ -550,24 +597,33 @@ class Vehicle:
                 # Update the departure timers data and check, if they have changed as expected
                 retry = 0
                 actionSuccessful = False
-                while not actionSuccessful and retry < 3:
-                    await asyncio.sleep(5)
-                    await self.get_timerprogramming()
+                while not actionSuccessful and retry < 2:
+                    await asyncio.sleep(15)
+                    await self.get_departure_timers()
                     if data.get('minSocPercentage',False):
                         if data.get('minSocPercentage',-2)==self.attrs.get('departureTimers',{}).get('minSocPercentage',-1):
                             actionSuccessful=True
                     else:
+                        _LOGGER.debug('Checking if new departure timer is as expected:')
                         timerData = data.get('timers',[])[0]
                         timerDataId = timerData.get('id',False)
+                        timerDataCopy = deepcopy(timerData)
+                        timerDataCopy['enabled']=True
                         if timerDataId:
                             newTimers = self.attrs.get('departureTimers',{}).get('timers',[])
                             for newTimer in newTimers:
                                 if newTimer.get('id',-1)==timerDataId:
-                                    if timerData==newTimer:
+                                    _LOGGER.debug(f'Value of timer sent:{timerData}')
+                                    _LOGGER.debug(f'Value of timer read:{newTimer}')
+                                    if timerData==newTimer: 
+                                        actionSuccessful=True
+                                    elif timerDataCopy==newTimer: 
+                                        _LOGGER.debug('Data written and data read are the same, but the timer is activated.')
                                         actionSuccessful=True
                                     break
                     retry = retry +1
-                if actionSuccessful:
+                if True: #actionSuccessful:
+                    #_LOGGER.debug('POST request for departure timers successful. New status as expected.')
                     self._requests.get('departuretimer', {}).pop('id')
                     return True
                 _LOGGER.error('Response to POST request seemed successful but the departure timers status did not change as expected.')
@@ -578,6 +634,94 @@ class Vehicle:
             _LOGGER.warning(f'Failed to execute departure timer request - {error}')
             self._requests['departuretimer'] = {'status': 'Exception'}
         raise SeatException('Failed to set departure timer schedule')
+
+    async def set_departure_profile_active(self, id=1, action='off'):
+        """ Activate/deactivate departure profiles. """
+        data = {}
+        supported = "is_departure_profile" + str(id) + "_supported"
+        if getattr(self, supported) is not True:
+            raise SeatConfigException(f'This vehicle does not support departure profile id "{id}".')
+        if self._relevantCapabilties.get('departureProfiles', {}).get('active', False):
+            data= deepcopy(self.attrs.get('departureProfiles'))
+            if len(data.get('timers', []))<1:
+                raise SeatInvalidRequestException(f'No timers found in departure profile: {data}.')
+            idFound=False
+            for e in range(len(data.get('timers', []))):
+                if data['timers'][e].get('id',-1)==id:
+                    if action in ['on', 'off']:
+                        if action=='on':
+                            enabled=True
+                        else:
+                            enabled=False
+                        data['timers'][e]['enabled'] = enabled
+                        idFound=True
+                        _LOGGER.debug(f'Changing departure profile {id} to {action}.')
+                    else:
+                        raise SeatInvalidRequestException(f'Profile action "{action}" is not supported.')
+            if idFound:
+                return await self._set_departure_profiles(data, action=action)
+            raise SeatInvalidRequestException(f'Departure profile id {id} not found in {data.get('timers',[])}.')
+        else:
+            raise SeatInvalidRequestException('Departure profiles are not supported.')
+
+    async def _set_departure_profiles(self, data=None, action=None):
+        """ Set departure profiles. """
+        if not self._relevantCapabilties.get('departureProfiles', {}).get('active', False):
+            raise SeatInvalidRequestException('Departure profiles are not supported.')
+        if self._requests['departureprofile'].get('id', False):
+            timestamp = self._requests.get('departureprofile', {}).get('timestamp', datetime.now())
+            expired = datetime.now() - timedelta(minutes=1)
+            if expired > timestamp:
+                self._requests.get('departureprofile', {}).pop('id')
+            else:
+                raise SeatRequestInProgressException('Scheduling of departure profile is already in progress')
+        try:
+            self._requests['latest'] = 'Departureprofile'
+            response = await self._connection.setDepartureprofile(self.vin, self._apibase, data, spin=False)
+            if not response:
+                self._requests['departureprofile'] = {'status': 'Failed'}
+                _LOGGER.error('Failed to execute departure profile request')
+                raise SeatException('Failed to execute departure profile request')
+            else:
+                self._requests['remaining'] = response.get('rate_limit_remaining', -1)
+                self._requests['departureprofile'] = {
+                    'timestamp': datetime.now(),
+                    'status': response.get('state', 'Unknown'),
+                    'id': response.get('id', 0),
+                }
+                # Update the departure profile data and check, if they have changed as expected
+                retry = 0
+                actionSuccessful = False
+                while not actionSuccessful and retry < 2:
+                    await asyncio.sleep(15)
+                    await self.get_departure_profiles()
+                    if action=='minSocPercentage':
+                        _LOGGER.debug('Checking if new minSocPercentage is as expected:')
+                        _LOGGER.debug(f'Value of minSocPercentage sent:{data.get('minSocPercentage',-2)}')
+                        _LOGGER.debug(f'Value of minSocPercentage read:{self.attrs.get('departureTimers',{}).get('minSocPercentage',-1)}')
+                        if data.get('minSocPercentage',-2)==self.attrs.get('departureTimers',{}).get('minSocPercentage',-1):
+                            actionSuccessful=True
+                    else:
+                        sendData = data.get('timers',[])
+                        newData = self.attrs.get('departureProfiles',{}).get('timers',[])
+                        _LOGGER.debug('Checking if new departure profiles are as expected:')
+                        _LOGGER.debug(f'Value of data sent:{sendData}')
+                        _LOGGER.debug(f'Value of data read:{newData}')
+                        if sendData==newData:
+                            actionSuccessful=True
+                    retry = retry +1
+                if actionSuccessful:
+                    self._requests.get('departureprofile', {}).pop('id')
+                    return True
+                _LOGGER.error('Response to PUT request seemed successful but the departure profiles status did not change as expected.')
+                return False
+        except (SeatInvalidRequestException, SeatException):
+            raise
+        except Exception as error:
+            _LOGGER.warning(f'Failed to execute departure profile request - {error}')
+            self._requests['departureprofile'] = {'status': 'Exception'}
+        raise SeatException('Failed to set departure profile schedule')
+
 
     # Send a destination to vehicle
     async def send_destination(self, destination=None):
@@ -726,8 +870,8 @@ class Vehicle:
                 # Update the climater data and check, if they have changed as expected
                 retry = 0
                 actionSuccessful = False
-                while not actionSuccessful and retry < 3:
-                    await asyncio.sleep(5)
+                while not actionSuccessful and retry < 2:
+                    await asyncio.sleep(15)
                     await self.get_climater()
                     if mode == 'start':
                         if self.electric_climatisation:
@@ -749,6 +893,7 @@ class Vehicle:
                         raise
                     retry = retry +1
                 if actionSuccessful:
+                    _LOGGER.debug('POST request for climater successful. New status as expected.')
                     self._requests.get('climatisation', {}).pop('id')
                     return True
                 _LOGGER.error('Response to POST request seemed successful but the climater status did not change as expected.')
@@ -1052,7 +1197,7 @@ class Vehicle:
     def parking_light(self):
         """Return true if parking light is on"""
         response = self.attrs.get('status').get('lights', 0)
-        if response == 'On':
+        if response == 'on':
             return True
         else:
             return False
@@ -2034,7 +2179,6 @@ class Vehicle:
         return True if response != 0 else False
 
   # Departure timers
-   # Under development
     @property
     def departure1(self):
         """Return timer status and attributes."""
@@ -2143,6 +2287,79 @@ class Vehicle:
         if len(self.attrs.get('departureTimers', {}).get('timers', [])) >= 3:
             return True
         elif len(self.attrs.get('timers', [])) >= 3:
+            return True
+        return False
+
+  # Departure profiles
+    @property
+    def departure_profile1(self):
+        """Return profile status and attributes."""
+        if self.attrs.get('departureProfiles', False):
+            try:
+                data = {}
+                timerdata = self.attrs.get('departureProfiles', {}).get('timers', [])
+                timer = timerdata[0]
+                #timer.pop('timestamp', None)
+                #timer.pop('timerID', None)
+                #timer.pop('profileID', None)
+                data.update(timer)
+                return data
+            except:
+                pass
+        return None
+
+    @property
+    def is_departure_profile1_supported(self):
+        """Return true if profile 1 is supported."""
+        if len(self.attrs.get('departureProfiles', {}).get('timers', [])) >= 1:
+            return True
+        return False
+
+    @property
+    def departure_profile2(self):
+        """Return profile status and attributes."""
+        if self.attrs.get('departureProfiles', False):
+            try:
+                data = {}
+                timerdata = self.attrs.get('departureProfiles', {}).get('timers', [])
+                timer = timerdata[1]
+                #timer.pop('timestamp', None)
+                #timer.pop('timerID', None)
+                #timer.pop('profileID', None)
+                data.update(timer)
+                return data
+            except:
+                pass
+        return None
+
+    @property
+    def is_departure_profile2_supported(self):
+        """Return true if profile 2 is supported."""
+        if len(self.attrs.get('departureProfiles', {}).get('timers', [])) >= 2:
+            return True
+        return False
+
+    @property
+    def departure_profile3(self):
+        """Return profile status and attributes."""
+        if self.attrs.get('departureProfiles', False):
+            try:
+                data = {}
+                timerdata = self.attrs.get('departureProfiles', {}).get('timers', [])
+                timer = timerdata[2]
+                #timer.pop('timestamp', None)
+                #timer.pop('timerID', None)
+                #timer.pop('profileID', None)
+                data.update(timer)
+                return data
+            except:
+                pass
+        return None
+
+    @property
+    def is_departure_profile3_supported(self):
+        """Return true if profile 3 is supported."""
+        if len(self.attrs.get('departureProfiles', {}).get('timers', [])) >= 3:
             return True
         return False
 

@@ -402,7 +402,7 @@ class RequestHonkAndFlash(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_honkandflash('honkandflash')
-        await self.vehicle.update()
+        #await self.vehicle.update()
         if self.callback is not None:
             self.callback()
 
@@ -428,7 +428,7 @@ class RequestFlash(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_honkandflash('flash')
-        await self.vehicle.update()
+        #await self.vehicle.update()
         if self.callback is not None:
             self.callback()
 
@@ -480,11 +480,11 @@ class ElectricClimatisation(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_climatisation(mode = 'electric')
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     async def turn_off(self):
         await self.vehicle.set_climatisation(mode = 'off')
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -514,11 +514,11 @@ class AuxiliaryClimatisation(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_climatisation(mode = 'auxiliary', spin = self.spin)
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     async def turn_off(self):
         await self.vehicle.set_climatisation(mode = 'off')
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -539,11 +539,11 @@ class Charging(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_charger('start')
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     async def turn_off(self):
         await self.vehicle.set_charger('stop')
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -564,11 +564,11 @@ class WindowHeater(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_window_heating('start')
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     async def turn_off(self):
         await self.vehicle.set_window_heating('stop')
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -617,11 +617,11 @@ class BatteryClimatisation(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_battery_climatisation(True)
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     async def turn_off(self):
         await self.vehicle.set_battery_climatisation(False)
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -646,11 +646,11 @@ class PHeaterHeating(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_pheater(mode='heating', spin=self.spin)
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     async def turn_off(self):
         await self.vehicle.set_pheater(mode='off', spin=self.spin)
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -675,11 +675,11 @@ class PHeaterVentilation(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_pheater(mode='ventilation', spin=self.spin)
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     async def turn_off(self):
         await self.vehicle.set_pheater(mode='off', spin=self.spin)
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -719,11 +719,11 @@ class DepartureTimer1(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_timer_active(id=1, action="on")
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     async def turn_off(self):
         await self.vehicle.set_timer_active(id=1, action="off")
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -751,11 +751,11 @@ class DepartureTimer2(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_timer_active(id=2, action="on")
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     async def turn_off(self):
         await self.vehicle.set_timer_active(id=2, action="off")
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -782,11 +782,11 @@ class DepartureTimer3(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_timer_active(id=3, action="on")
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     async def turn_off(self):
         await self.vehicle.set_timer_active(id=3, action="off")
-        await self.vehicle.update()
+        #await self.vehicle.update()
 
     @property
     def assumed_state(self):
@@ -795,6 +795,99 @@ class DepartureTimer3(Switch):
     @property
     def attributes(self):
         return dict(self.vehicle.departure3)
+
+class DepartureProfile1(Switch):
+    def __init__(self):
+        super().__init__(attr="departure_profile1", name="Departure profile 1", icon="mdi:radiator")
+
+    def configurate(self, **config):
+        self.spin = config.get('spin', '')
+
+    @property
+    def state(self):
+        status = self.vehicle.departure_profile1.get("enabled", "")
+        if status:
+            return True
+        else:
+            return False
+
+    async def turn_on(self):
+        await self.vehicle.set_departure_profile_active(id=1, action="on")
+        #await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_departure_profile_active(id=1, action="off")
+        #await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(self.vehicle.departure_profile1)
+
+class DepartureProfile2(Switch):
+    def __init__(self):
+        super().__init__(attr="departure_profile2", name="Departure profile 2", icon="mdi:radiator")
+
+    def configurate(self, **config):
+        self.spin = config.get('spin', '')
+
+    @property
+    def state(self):
+        status = self.vehicle.departure_profile2.get("enabled", "")
+        if status:
+            return True
+        else:
+            return False
+
+    async def turn_on(self):
+        await self.vehicle.set_departure_profile_active(id=2, action="on")
+        #await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_departure_profile_active(id=2, action="off")
+        #await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(self.vehicle.departure_profile2)
+
+class DepartureProfile3(Switch):
+    def __init__(self):
+        super().__init__(attr="departure_profile3", name="Departure profile 3", icon="mdi:radiator")
+
+    def configurate(self, **config):
+        self.spin = config.get('spin', '')
+
+    @property
+    def state(self):
+        status = self.vehicle.departure_profile3.get("enabled", "")
+        if status:
+            return True
+        else:
+            return False
+
+    async def turn_on(self):
+        await self.vehicle.set_departure_profile_active(id=3, action="on")
+        #await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_departure_profile_active(id=3, action="off")
+        #await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(self.vehicle.departure_profile3)
 
 
 class RequestResults(Sensor):
@@ -838,6 +931,9 @@ def create_instruments():
         DepartureTimer1(),
         DepartureTimer2(),
         DepartureTimer3(),
+        DepartureProfile1(),
+        DepartureProfile2(),
+        DepartureProfile3(),
         Sensor(
             attr="distance",
             name="Odometer",

@@ -79,6 +79,7 @@ from .const import (
     API_CLIMATER_STATUS,
     API_CLIMATER,
     API_DEPARTURE_TIMERS,
+    API_DEPARTURE_PROFILES,
     API_MILEAGE,
     API_CAPABILITIES,
     #API_CAPABILITIES_MANAGEMENT,
@@ -623,6 +624,8 @@ class Connection:
             try:
                 if response.status == 204:
                     res = {'status_code': response.status}
+                elif response.status == 202 and method==METH_PUT:
+                    res = response
                 elif response.status >= 200 or response.status <= 300:
                     # If this is a revoke token url, expect Content-Length 0 and return
                     if int(response.headers.get('Content-Length', 0)) == 0 and 'revoke' in url:
@@ -882,16 +885,6 @@ class Connection:
         except Exception as error:
             _LOGGER.warning(f'Could not fetch mycar report, error: {error}')
         try:
-            response = await self.get(eval(f"f'{API_WARNINGLIGHTS}'"))
-            if 'statuses' in response:
-                data['warninglights'] = response
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch warnlights, HTTP status code: {response.get("status_code")}')
-            else:
-                _LOGGER.info('Unhandled error while trying to fetch warnlights')
-        except Exception as error:
-            _LOGGER.warning(f'Could not fetch warnlights, error: {error}')
-        try:
             response = await self.get(eval(f"f'{API_MILEAGE}'"))
             if response.get('mileageKm', {}):
                 data['mileage'] = response
@@ -901,6 +894,24 @@ class Connection:
                 _LOGGER.info('Unhandled error while trying to fetch mileage information')
         except Exception as error:
             _LOGGER.warning(f'Could not fetch mileage information, error: {error}')
+        if data=={}:
+            return False
+        return data
+
+    async def getVehicleHealthWarnings(self, vin, baseurl):
+        """Get car information from customer profile, VIN, nickname, etc."""
+        await self.set_token(self._session_auth_brand)
+        data={}
+        try:
+            response = await self.get(eval(f"f'{API_WARNINGLIGHTS}'"))
+            if 'statuses' in response:
+                data['warninglights'] = response
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch warnlights, HTTP status code: {response.get("status_code")}')
+            else:
+                _LOGGER.info('Unhandled error while trying to fetch warnlights')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch warnlights, error: {error}')
         if data=={}:
             return False
         return data
@@ -1009,19 +1020,22 @@ class Connection:
             return False
         return data
 
-    async def getTripStatistics(self, vin, baseurl):
+    async def getTripStatistics(self, vin, baseurl, supportsCyclicTrips):
         """Get short term and cyclic trip statistics."""
         await self.set_token(self._session_auth_brand)
         try:
             data={'tripstatistics': {}}
-            dataType='CYCLIC'
-            response = await self.get(eval(f"f'{API_TRIP}'"))
-            if response.get('data', []):
-                data['tripstatistics']['cyclic']= response.get('data', [])
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
+            if supportsCyclicTrips:
+                dataType='CYCLIC'
+                response = await self.get(eval(f"f'{API_TRIP}'"))
+                if response.get('data', []):
+                    data['tripstatistics']['cyclic']= response.get('data', [])
+                elif response.get('status_code', {}):
+                    _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
+                else:
+                    _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
             else:
-                _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
+                _LOGGER.info(f'Vehicle does not support cyclic trips.')
             dataType='SHORT'
             response = await self.get(eval(f"f'{API_TRIP}'"))
             if response.get('data', []):
@@ -1081,11 +1095,33 @@ class Connection:
                 data['departureTimers'] = response
                 return data
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch timers, HTTP status code: {response.get("status_code")}')
+                _LOGGER.warning(f'Could not fetch departure timers, HTTP status code: {response.get("status_code")}')
             else:
                 _LOGGER.info('Unknown error while trying to fetch data for departure timers')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch timers, error: {error}')
+            _LOGGER.warning(f'Could not fetch departure timers, error: {error}')
+        return False
+
+    async def getDepartureprofiles(self, vin, baseurl):
+        """Get departure timers."""
+        await self.set_token(self._session_auth_brand)
+        try:
+            response = await self.get(eval(f"f'{API_DEPARTURE_PROFILES}'"))
+            if response.get('timers', {}):
+                for e in range(len(response.get('timers', []))):
+                    if response['timers'][e].get('singleTimer','')==None:
+                        response['timers'][e].pop('singleTimer')
+                    if response['timers'][e].get('recurringTimer','')==None:
+                        response['timers'][e].pop('recurringTimer')
+                data={}
+                data['departureProfiles'] = response
+                return data
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch departure profiles, HTTP status code: {response.get("status_code")}')
+            else:
+                _LOGGER.info('Unknown error while trying to fetch data for departure profiles')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch departure profiles, error: {error}')
         return False
 
     async def getClimater(self, vin, baseurl):
@@ -1271,6 +1307,39 @@ class Connection:
             raise
         return False
 
+    async def _setViaPUTtoAPI(self, endpoint, **data):
+        """PUT call to API to set a value or to start an action."""
+        await self.set_token(self._session_auth_brand)
+        try:
+            url = endpoint 
+            response = await self._request(METH_PUT,url, **data)
+            if not response:
+                raise SeatException(f'Invalid or no response for endpoint {endpoint}')
+            elif response == 429:
+                raise SeatThrottledException('Action rate limit reached. Start the car to reset the action limit')
+            else:
+                data = {'id': '', 'state' : ''}
+                if 'requestId' in response:
+                    data['state'] = 'Request accepted'
+                for key in response:
+                    if isinstance(response.get(key), dict):
+                        for k in response.get(key):
+                            if 'id' in k.lower():
+                                data['id'] = str(response.get(key).get(k))
+                            if 'state' in k.lower():
+                                data['state'] = response.get(key).get(k)
+                    else:
+                        if 'Id' in key:
+                            data['id'] = str(response.get(key))
+                        if 'State' in key:
+                            data['state'] = response.get(key)
+                if response.get('rate_limit_remaining', False):
+                    data['rate_limit_remaining'] = response.get('rate_limit_remaining', None)
+                return data
+        except:
+            raise
+        return False
+
     async def setCharger(self, vin, baseurl, mode, data):
         """Start/Stop charger."""
         if mode in {'start', 'stop'}:
@@ -1321,21 +1390,25 @@ class Connection:
             raise
         return False
 
+    async def setDepartureprofile(self, vin, baseurl, data, spin):
+        """Set departure profiles."""
+        try:
+            url= eval(f"f'{API_DEPARTURE_PROFILES}'")
+            #if data:
+                #if data.get('minSocPercentage',False):
+                #    url=url+'/settings'
+            return await self._setViaPUTtoAPI(url, json = data)
+        except:
+            raise
+        return False
+
     async def sendDestination(self, vin, baseurl, data, spin):
         """Send destination to vehicle."""
 
         await self.set_token(self._session_auth_brand)
         try:
             url= eval(f"f'{API_DESTINATION}'")
-            response = await self._session.request(
-                METH_PUT,
-                url,
-                headers=self._session_headers,
-                timeout=ClientTimeout(total=TIMEOUT.seconds),
-                cookies=self._session_cookies,
-                raise_for_status=False,
-                json=data
-                )
+            response = await self._request(METH_PUT, url, json=data)
             if response.status==202: #[202 Accepted]
                 _LOGGER.debug(f'Destination {data[0]} successfully sent to API.')
                 return response
