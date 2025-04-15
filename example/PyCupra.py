@@ -75,6 +75,7 @@ RESOURCES = [
 		"fuel_level",
 		"hood_closed",
 		"last_connected",
+		"last_full_update",
 		"lock_action_status",
 		"oil_inspection",
 		"oil_inspection_distance",

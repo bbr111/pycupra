@@ -78,10 +78,10 @@ class Vehicle:
   # Init and update vehicle data
     async def discover(self):
         """Discover vehicle and initial data."""
-        await asyncio.gather(
-            self.get_basiccardata(),
-            return_exceptions=True
-        )
+        #await asyncio.gather(
+        #    self.get_basiccardata(),
+        #    return_exceptions=True
+        #)
         # Extract information of relevant capabilities
         for capa in self._capabilities:
             id=capa.get('id', '')
@@ -104,13 +104,13 @@ class Vehicle:
                 self._relevantCapabilties[id].update(data)
                 
 
-        await self.get_trip_statistic(),
+        await self.get_trip_statistic()
         # Get URLs for model image
-        self._modelimages = await self.get_modelimageurl(),
+        self._modelimages = await self.get_modelimageurl()
 
         self._discovered = datetime.now()
 
-    async def update(self):
+    async def update(self, updateType=0):
         """Try to fetch data for all known API endpoints."""
         # Update vehicle information if not discovered or stale information
         if not self._discovered:
@@ -125,6 +125,21 @@ class Vehicle:
         # Fetch all data if car is not deactivated
         if not self.deactivated:
             try:
+                # Data to be updated most often
+                await asyncio.gather(
+                    self.get_charger(),
+                    self.get_basiccardata(),
+                    return_exceptions=True
+                )
+
+                fullUpdateExpired = datetime.now(timezone.utc) - timedelta(seconds= 1100)
+                if hasattr(self, '_last_full_update'):
+                    _LOGGER.debug(f'last_full_update= {self._last_full_update}, fullUpdateExpired= {fullUpdateExpired}.')
+                if updateType!=1 and (hasattr(self, '_last_full_update') and self._last_full_update>fullUpdateExpired):
+                    _LOGGER.debug(f'Just performed small update for vehicle with VIN {self.vin}.')
+                    return True
+                
+                # Data to be updated less often
                 await asyncio.gather(
                     self.get_preheater(),
                     self.get_climater(),
@@ -132,13 +147,14 @@ class Vehicle:
                     self.get_position(),
                     self.get_statusreport(),
                     self.get_vehicleHealthWarnings(),
-                    self.get_charger(),
                     self.get_departure_timers(),
                     self.get_departure_profiles(),
-                    self.get_basiccardata(),
+                    self.get_mileage(),
                     #self.get_modelimageurl(), #commented out, because getting the images discover() should be sufficient
                     return_exceptions=True
                 )
+                self._last_full_update = datetime.now(timezone.utc)
+                _LOGGER.debug(f'Performed full update for vehicle with VIN {self.vin}.')
             except:
                 raise SeatException("Update failed")
             return True
@@ -155,6 +171,12 @@ class Vehicle:
     async def get_basiccardata(self):
         """Fetch basic car data."""
         data = await self._connection.getBasicCarData(self.vin, self._apibase)
+        if data:
+            self._states.update(data)
+
+    async def get_mileage(self):
+        """Fetch basic car data."""
+        data = await self._connection.getMileage(self.vin, self._apibase)
         if data:
             self._states.update(data)
 
@@ -320,7 +342,7 @@ class Vehicle:
             raise SeatInvalidRequestException('Remote start/stop of charger is not supported.')
         if self._requests['batterycharge'].get('id', False):
             timestamp = self._requests.get('batterycharge', {}).get('timestamp', datetime.now())
-            expired = datetime.now() - timedelta(minutes=3)
+            expired = datetime.now() - timedelta(minutes=1)
             if expired > timestamp:
                 self._requests.get('batterycharge', {}).pop('id')
             else:
@@ -574,7 +596,7 @@ class Vehicle:
             raise SeatInvalidRequestException('Departure timers are not supported.')
         if self._requests['departuretimer'].get('id', False):
             timestamp = self._requests.get('departuretimer', {}).get('timestamp', datetime.now())
-            expired = datetime.now() - timedelta(minutes=3)
+            expired = datetime.now() - timedelta(minutes=1)
             if expired > timestamp:
                 self._requests.get('departuretimer', {}).pop('id')
             else:
@@ -848,7 +870,7 @@ class Vehicle:
             raise SeatInvalidRequestException('Remote control of climatisation functions is not supported.')
         if self._requests['climatisation'].get('id', False):
             timestamp = self._requests.get('climatisation', {}).get('timestamp', datetime.now())
-            expired = datetime.now() - timedelta(minutes=3)
+            expired = datetime.now() - timedelta(minutes=1)
             if expired > timestamp:
                 self._requests.get('climatisation', {}).pop('id')
             else:
@@ -913,7 +935,7 @@ class Vehicle:
             raise SeatInvalidRequestException('No parking heater support.')
         if self._requests['preheater'].get('id', False):
             timestamp = self._requests.get('preheater', {}).get('timestamp', datetime.now())
-            expired = datetime.now() - timedelta(minutes=3)
+            expired = datetime.now() - timedelta(minutes=1)
             if expired > timestamp:
                 self._requests.get('preheater', {}).pop('id')
             else:
@@ -1053,7 +1075,7 @@ class Vehicle:
            raise SeatInvalidRequestException('Data refresh is not supported.')
         if self._requests['refresh'].get('id', False):
             timestamp = self._requests.get('refresh', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
-            expired = datetime.now() - timedelta(minutes=3)
+            expired = datetime.now() - timedelta(minutes=1)
             if expired > timestamp:
                 self._requests.get('refresh', {}).pop('id')
             else:
@@ -1227,6 +1249,17 @@ class Vehicle:
         """Return when vehicle was last connected to connect servers."""
         if 'updatedAt' in self.attrs.get('status', {}):
             return True
+
+  # Update status
+    @property
+    def last_full_update(self):
+        """Return when the last full update for the vehicle took place."""
+        return self._last_full_update.astimezone(tz=None)
+
+    @property
+    def is_last_full_update_supported(self):
+        """Return when last full update for vehicle took place."""
+        return True
 
   # Service information
     @property
@@ -2682,6 +2715,16 @@ class Vehicle:
         """Data refresh is supported."""
         if self._connectivities.get('mode', '') == 'online':
             return True
+
+    @property
+    def update_data(self):
+        """Get state of data update"""
+        return False
+
+    @property
+    def is_update_data_supported(self):
+        """Data update is supported."""
+        return True
 
    # Honk and flash
     @property

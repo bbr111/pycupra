@@ -694,7 +694,7 @@ class Connection:
             for vehicle in self.vehicles:
                 if vehicle.vin not in update_list:
                     _LOGGER.debug(f'Adding {vehicle.vin} for data refresh')
-                    update_list.append(vehicle.update())
+                    update_list.append(vehicle.update(updateType=1))
                 else:
                     _LOGGER.debug(f'VIN {vehicle.vin} is already queued for data refresh')
 
@@ -884,6 +884,14 @@ class Connection:
                 _LOGGER.info('Unhandled error while trying to fetch mycar data')
         except Exception as error:
             _LOGGER.warning(f'Could not fetch mycar report, error: {error}')
+        if data=={}:
+            return False
+        return data
+
+    async def getMileage(self, vin, baseurl):
+        """Get car information from customer profile, VIN, nickname, etc."""
+        await self.set_token(self._session_auth_brand)
+        data={}
         try:
             response = await self.get(eval(f"f'{API_MILEAGE}'"))
             if response.get('mileageKm', {}):

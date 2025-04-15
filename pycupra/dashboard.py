@@ -444,9 +444,9 @@ class RequestFlash(Switch):
         return dict(last_result = self.vehicle.honkandflash_action_status)
 
 
-class RequestUpdate(Switch):
+class RequestRefresh(Switch):
     def __init__(self):
-        super().__init__(attr="refresh_data", name="Force data refresh", icon="mdi:car-connected")
+        super().__init__(attr="refresh_data", name="Request wakeup vehicle", icon="mdi:car-connected")
 
     @property
     def state(self):
@@ -454,7 +454,7 @@ class RequestUpdate(Switch):
 
     async def turn_on(self):
         await self.vehicle.set_refresh()
-        await self.vehicle.update()
+        await self.vehicle.update(updateType=1) #full update after set_refresh
         if self.callback is not None:
             self.callback()
 
@@ -468,6 +468,31 @@ class RequestUpdate(Switch):
     @property
     def attributes(self):
         return dict(last_result = self.vehicle.refresh_action_status)
+
+
+class RequestUpdate(Switch):
+    def __init__(self):
+        super().__init__(attr="update_data", name="Request full update", icon="mdi:timer-refresh")
+
+    @property
+    def state(self):
+        return False #self.vehicle.update
+
+    async def turn_on(self):
+        await self.vehicle.update(updateType=1) #full update after set_refresh
+        if self.callback is not None:
+            self.callback()
+
+    async def turn_off(self):
+        pass
+
+    @property
+    def assumed_state(self):
+        return False
+
+    #@property
+    #def attributes(self):
+    #    return dict()
 
 
 class ElectricClimatisation(Switch):
@@ -916,6 +941,7 @@ def create_instruments():
         TrunkLock(),
         RequestFlash(),
         RequestHonkAndFlash(),
+        RequestRefresh(),
         RequestUpdate(),
         WindowHeater(),
         BatteryClimatisation(),
@@ -997,6 +1023,12 @@ def create_instruments():
         Sensor(
             attr="last_connected",
             name="Last connected",
+            icon="mdi:clock",
+            device_class="timestamp"
+        ),
+        Sensor(
+            attr="last_full_update",
+            name="Last full update",
             icon="mdi:clock",
             device_class="timestamp"
         ),
