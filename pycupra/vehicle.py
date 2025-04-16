@@ -107,7 +107,8 @@ class Vehicle:
                 self._relevantCapabilties[id].update(data)
                 
 
-        await self.get_trip_statistic()
+        #await self.get_trip_statistic() # in full update
+        
         # Get URLs for model image
         self._modelimages = await self.get_modelimageurl()
 
@@ -132,6 +133,7 @@ class Vehicle:
                 await asyncio.gather(
                     self.get_charger(),
                     self.get_basiccardata(),
+                    self.get_statusreport(),
                     return_exceptions=True
                 )
 
@@ -146,9 +148,9 @@ class Vehicle:
                 await asyncio.gather(
                     self.get_preheater(),
                     self.get_climater(),
-                    #self.get_trip_statistic(), # commented out, because getting the trip statistic in discover() should be sufficient
+                    self.get_trip_statistic(), 
                     self.get_position(),
-                    self.get_statusreport(),
+                    self.get_maintenance(),
                     self.get_vehicleHealthWarnings(),
                     self.get_departure_timers(),
                     self.get_departure_profiles(),
@@ -251,6 +253,9 @@ class Vehicle:
                 self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch status report')
+
+    async def get_maintenance(self):
+        """Fetch maintenance data if function is enabled."""
         if self._relevantCapabilties.get('vehicleHealthInspection', {}).get('active', False):
             data = await self._connection.getMaintenance(self.vin, self._apibase)
             if data:
@@ -1006,7 +1011,25 @@ class Vehicle:
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
-                return True
+                # Update the lock data and check, if they have changed as expected
+                retry = 0
+                actionSuccessful = False
+                while not actionSuccessful and retry < 2:
+                    await asyncio.sleep(15)
+                    await self.get_statusreport()
+                    if action == 'lock':
+                        if self.door_locked:
+                            actionSuccessful = True
+                    else:
+                        if not self.door_locked:
+                            actionSuccessful = True
+                    retry = retry +1
+                if actionSuccessful:
+                    _LOGGER.debug('POST request for lock/unlock successful. New status as expected.')
+                    self._requests.get('lock', {}).pop('id')
+                    return True
+                _LOGGER.error('Response to POST request seemed successful but the lock status did not change as expected.')
+                return False
         except (SeatInvalidRequestException, SeatException):
             raise
         except Exception as error:
