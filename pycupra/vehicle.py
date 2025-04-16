@@ -74,6 +74,9 @@ class Vehicle:
             'transactionHistoryHonkFlash': {'active': False, 'reason': 'not supported'},
         }
 
+        self._last_full_update = datetime.now(tz=None) - timedelta(seconds=1200)
+
+
  #### API get and set functions ####
   # Init and update vehicle data
     async def discover(self):
@@ -132,7 +135,7 @@ class Vehicle:
                     return_exceptions=True
                 )
 
-                fullUpdateExpired = datetime.now(timezone.utc) - timedelta(seconds= 1100)
+                fullUpdateExpired = datetime.now(tz=None) - timedelta(seconds= 1100)
                 if hasattr(self, '_last_full_update'):
                     _LOGGER.debug(f'last_full_update= {self._last_full_update}, fullUpdateExpired= {fullUpdateExpired}.')
                 if updateType!=1 and (hasattr(self, '_last_full_update') and self._last_full_update>fullUpdateExpired):
@@ -153,8 +156,9 @@ class Vehicle:
                     #self.get_modelimageurl(), #commented out, because getting the images discover() should be sufficient
                     return_exceptions=True
                 )
-                self._last_full_update = datetime.now(timezone.utc)
+                self._last_full_update = datetime.now(tz=None)
                 _LOGGER.debug(f'Performed full update for vehicle with VIN {self.vin}.')
+                _LOGGER.debug(f'So far about {self._connection._sessionRequestCounter} API calls since {self._connection._sessionRequestTimestamp}.')
             except:
                 raise SeatException("Update failed")
             return True
@@ -1259,7 +1263,8 @@ class Vehicle:
     @property
     def is_last_full_update_supported(self):
         """Return when last full update for vehicle took place."""
-        return True
+        if hasattr(self,'_last_full_update'):
+            return True
 
   # Service information
     @property

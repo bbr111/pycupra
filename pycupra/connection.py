@@ -136,6 +136,10 @@ class Connection:
         _LOGGER.info(f'Init PyCupra library, version {lib_version}')
         _LOGGER.debug(f'Using service {self._session_base}')
 
+        self._sessionRequestCounter = 0
+        self._sessionRequestTimestamp = datetime.now(tz= None)
+        self._sessionRequestCounterHistory = {}
+
 
     def _clear_cookies(self):
         self._session._cookie_jar._cookies.clear()
@@ -604,6 +608,19 @@ class Connection:
         """Perform a HTTP query"""
         if self._session_fulldebug:
             _LOGGER.debug(f'HTTP {method} "{url}"')
+        try:
+            if datetime.now(tz=None).date() != self._sessionRequestTimestamp.date():
+                # A new day has begun. Store _sessionRequestCounter in history and reset timestamp and counter
+                self._sessionRequestCounterHistory[self._sessionRequestTimestamp.strftime('%Y-%m-%d')]=self._sessionRequestCounter
+                _LOGGER.info(f'History of the number of API calls:')
+                for key, value in self._sessionRequestCounterHistory.items:
+                    _LOGGER.info(f'   Date: {key}: {value} API calls')
+
+                self._sessionRequestTimestamp= datetime.now(tz=None)
+                self._sessionRequestCounter = 0
+        except Exception as e:
+            _LOGGER.error(f'Error while preparing output of API call history. Error: {e}')
+        self._sessionRequestCounter = self._sessionRequestCounter + 1
         async with self._session.request(
             method,
             url,
