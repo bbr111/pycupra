@@ -24,7 +24,7 @@ from json import dumps as to_json
 from jwt.exceptions import ExpiredSignatureError
 import aiohttp
 from bs4 import BeautifulSoup
-from base64 import b64decode, b64encode
+from base64 import b64decode, b64encode, urlsafe_b64decode, urlsafe_b64encode
 from .__version__ import __version__ as lib_version
 from .utilities import read_config, json_loads
 from .vehicle import Vehicle
@@ -43,7 +43,6 @@ from .exceptions import (
 )
 
 from requests_oauthlib import OAuth2Session
-import base64
 from oauthlib.oauth2.rfc6749.parameters import parse_authorization_code_response, parse_token_response, prepare_grant_uri
 
 from aiohttp import ClientSession, ClientTimeout
@@ -267,10 +266,10 @@ class Connection:
             authorizationEndpoint = response_data['authorization_endpoint']
             authissuer = response_data['issuer']
             oauthClient = OAuth2Session(client_id=CLIENT_LIST[client].get('CLIENT_ID'), scope=CLIENT_LIST[client].get('SCOPE'), redirect_uri=CLIENT_LIST[client].get('REDIRECT_URL'))
-            code_verifier = base64.urlsafe_b64encode(os.urandom(40)).decode('utf-8')
+            code_verifier = urlsafe_b64encode(os.urandom(40)).decode('utf-8')
             code_verifier = re.sub('[^a-zA-Z0-9]+', '', code_verifier)
             code_challenge = hashlib.sha256(code_verifier.encode("utf-8")).digest()
-            code_challenge = base64.urlsafe_b64encode(code_challenge).decode("utf-8")
+            code_challenge = urlsafe_b64encode(code_challenge).decode("utf-8")
             code_challenge = code_challenge.replace("=", "")
             authorization_url, state = oauthClient.authorization_url(authorizationEndpoint, code_challenge=code_challenge, code_challenge_method='S256', 
                                                                         nonce=self._session_nonce, state=self._session_state)

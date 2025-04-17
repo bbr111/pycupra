@@ -341,7 +341,7 @@ class DoorLock(Instrument):
     async def lock(self):
         try:
             response = await self.vehicle.set_lock('lock', self.spin)
-            await self.vehicle.update()
+            #await self.vehicle.update()
             if self.callback is not None:
                 self.callback()
             return response
@@ -352,7 +352,7 @@ class DoorLock(Instrument):
     async def unlock(self):
         try:
             response = await self.vehicle.set_lock('unlock', self.spin)
-            await self.vehicle.update()
+            #await self.vehicle.update()
             if self.callback is not None:
                 self.callback()
             return response
@@ -365,7 +365,7 @@ class DoorLock(Instrument):
         return dict(last_result = self.vehicle.lock_action_status)
 
 
-class TrunkLock(Instrument):
+"""class TrunkLock(Instrument):
     def __init__(self):
         super().__init__(component="lock", attr="trunk_locked", name="Trunk locked")
 
@@ -385,12 +385,12 @@ class TrunkLock(Instrument):
     def is_locked(self):
         return self.state
 
-    async def lock(self):
-        return None
+    #async def lock(self):
+    #    return None
 
-    async def unlock(self):
-        return None
-
+    #async def unlock(self):
+    #    return None
+"""
 # Switches
 class RequestHonkAndFlash(Switch):
     def __init__(self):
@@ -938,7 +938,7 @@ def create_instruments():
     return [
         Position(),
         DoorLock(),
-        TrunkLock(),
+        #TrunkLock(),
         RequestFlash(),
         RequestHonkAndFlash(),
         RequestRefresh(),
