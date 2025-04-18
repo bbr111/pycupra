@@ -612,7 +612,7 @@ class Connection:
                 # A new day has begun. Store _sessionRequestCounter in history and reset timestamp and counter
                 self._sessionRequestCounterHistory[self._sessionRequestTimestamp.strftime('%Y-%m-%d')]=self._sessionRequestCounter
                 _LOGGER.info(f'History of the number of API calls:')
-                for key, value in self._sessionRequestCounterHistory.items:
+                for key, value in self._sessionRequestCounterHistory.items():
                     _LOGGER.info(f'   Date: {key}: {value} API calls')
 
                 self._sessionRequestTimestamp= datetime.now(tz=None)
