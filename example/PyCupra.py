@@ -48,6 +48,7 @@ RESOURCES = [
 		"charging",
         "charge_rate",
         "charging_power",
+        "charging_state",
 		"charging_cable_connected",
 		"charging_cable_locked",
 		"charging_time_left",
@@ -70,7 +71,7 @@ RESOURCES = [
 		"door_locked",
 		"electric_climatisation",
 		"electric_range",
-		"energy_flow",
+		#"energy_flow",
 		"external_power",
 		"fuel_level",
 		"hood_closed",
@@ -204,11 +205,41 @@ async def demo_set_timer_schedule(vehicle):
         print("   Request failed.")
     return success
 
+async def demo_set_departure_profile_schedule(vehicle):
+    print('########################################')
+    print('#    Change one departure profile      #')
+    print('########################################')
+    success= await vehicle.set_departure_profile_schedule(id = 3,                             # id = 1, 2, 3
+        schedule = {                                               # Set the departure time, date and periodicity
+            "enabled": True,                                       # Set the timer active or not, True or False, required
+            "recurring": True,                                     # True or False for recurring, required
+            "time": "12:34",                                       # Time for departure, required
+            "days": "nyynnnn",                                     # Days (mon-sun) for recurring schedule (n=disable, y=enable), required if recurring=True
+            "chargingProgramId": 2,                                # Id of the charging program to be used for the departure profile
+            }
+        )
+    if success:
+        print("   Request completed successfully.")
+    else:
+        print("   Request failed.")
+    return success
+
 async def demo_set_timer_active(vehicle, id=1, action="off"):
     print('########################################')
-    print('#       Active/Deactivate one timer    #')
+    print('#         (De-)Activate one timer      #')
     print('########################################')
     success= await vehicle.set_timer_active(id, action)                # id = 1, 2, 3, action = "on" or "off".
+    if success:
+        print("   Request completed successfully.")
+    else:
+        print("   Request failed.")
+    return success
+
+async def demo_set_departure_profile_active(vehicle, id=1, action="off"):
+    print('########################################')
+    print('#  (De-)Activate one departure profile #')
+    print('########################################')
+    success= await vehicle.set_departure_profile_active(id, action)     # id = 1, 2, 3, action = "on" or "off".
     if success:
         print("   Request completed successfully.")
     else:
@@ -502,6 +533,9 @@ async def main():
             #await demo_set_timer_active(vehicle, id=3, action="off")                 # id = 1, 2, 3, action = "on" or "off".
             #await demo_set_charge_limit(vehicle, 30)                                 # limit = PHEV: 0/10/20/30/40/50, EV: 50/60/70/80/90/100
             
+            #await demo_set_departure_profile_schedule(vehicle)                       # arguments id and schedule can be found in the demo function
+            #await demo_set_departure_profile_active(vehicle, id=3, action="off")                 # id = 1, 2, 3, action = "on" or "off".
+
             #await demo_set_lock(vehicle,action = "lock", 
             #                    spin = credentials.get('spin',''))                    # action = "unlock" or "lock". spin = SPIN, needed for both
 

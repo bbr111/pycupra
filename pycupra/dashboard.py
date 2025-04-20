@@ -1285,6 +1285,11 @@ def create_instruments():
             device_class="power"
         ),
         BinarySensor(
+            attr="charging_state",
+            name="Charging state",
+            device_class="power"
+        ),
+        BinarySensor(
             attr="parking_light",
             name="Parking light",
             device_class="light",

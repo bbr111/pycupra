@@ -471,7 +471,7 @@ class Vehicle:
             raise SeatInvalidRequestException('Departure timers are not supported.')
 
     async def set_timer_schedule(self, id, schedule={}):
-        """ Set departure schedules. """
+        """ Set departure timer schedule. """
         data = {}
         # Validate required user inputs
         supported = "is_departure" + str(id) + "_supported"
@@ -518,7 +518,7 @@ class Vehicle:
                 if not 16 <= int(schedule.get("targetTemp", None)) <= 30:
                     raise SeatInvalidRequestException('Target temp must be integer value from 16 to 30')
                 else:
-                    data['temp'] = schedule.get('targetTemp')
+                    data['temp'] = int(schedule.get('targetTemp'))
                     raise SeatInvalidRequestException('Target temp (yet) not supported.')
 
             # Validate charge target and current
@@ -665,6 +665,98 @@ class Vehicle:
             _LOGGER.warning(f'Failed to execute departure timer request - {error}')
             self._requests['departuretimer'] = {'status': 'Exception'}
         raise SeatException('Failed to set departure timer schedule')
+
+    async def set_departure_profile_schedule(self, id, schedule={}):
+        """ Set departure profile schedule. """
+        data = {}
+        # Validate required user inputs
+        supported = "is_departure_profile" + str(id) + "_supported"
+        if getattr(self, supported) is not True:
+            raise SeatConfigException(f'Departure profile id {id} is not supported for this vehicle.')
+        else:
+            _LOGGER.debug(f'Departure profile id {id} is supported')
+        if not schedule:
+            raise SeatInvalidRequestException('A schedule must be set.')
+        if not isinstance(schedule.get('enabled', ''), bool):
+            raise SeatInvalidRequestException('The enabled variable must be set to True or False.')
+        if not isinstance(schedule.get('recurring', ''), bool):
+            raise SeatInvalidRequestException('The recurring variable must be set to True or False.')
+        if not re.match('^[0-9]{2}:[0-9]{2}$', schedule.get('time', '')):
+            raise SeatInvalidRequestException('The time for departure must be set in 24h format HH:MM.')
+
+        # Validate optional inputs
+        if schedule.get('recurring', False):
+            if not re.match('^[yn]{7}$', schedule.get('days', '')):
+                raise SeatInvalidRequestException('For recurring schedules the days variable must be set to y/n mask (mon-sun with only wed enabled): nnynnnn.')
+        elif not schedule.get('recurring'):
+            if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', schedule.get('date', '')):
+                raise SeatInvalidRequestException('For single departure profile schedule the date variable must be set to YYYY-mm-dd.')
+
+        if self._relevantCapabilties.get('departureProfiles', {}).get('active', False):
+            # Check if profileIds is set and correct
+            if schedule.get('chargingProgramId', False):
+                # At the moment, only one charging program id is supported
+                chargingProgramId = int(schedule.get('chargingProgramId', False))
+                found = False
+                for chargingProgram in self.attrs.get('departureProfiles', {}).get('profileIds', []):
+                    if chargingProgram.get('id',None) == chargingProgramId:
+                        found = True
+                        break
+                if not found:
+                    raise SeatInvalidRequestException('The charging program id provided for the departure profile schedule is unknown.')
+                else:
+                    profileIds = []
+                    profileIds.append(chargingProgramId)
+            else:
+                raise SeatInvalidRequestException('No charging program id provided for departure profile schedule.')
+
+            newDepProfileSchedule = {}
+            # Prepare data and execute
+            newDepProfileSchedule['id'] = id
+            # Converting schedule to data map
+            if schedule.get("enabled",False):
+                newDepProfileSchedule['enabled']=True
+            else:
+                newDepProfileSchedule['enabled']=False
+            if schedule.get("recurring",False):
+                newDepProfileSchedule['recurringTimer']= {
+                    "startTime": schedule.get('time',"00:00"),
+                    "recurringOn":{""
+                        "mondays":(schedule.get('days',"nnnnnnn")[0]=='y'),
+                        "tuesdays":(schedule.get('days',"nnnnnnn")[1]=='y'),
+                        "wednesdays":(schedule.get('days',"nnnnnnn")[2]=='y'),
+                        "thursdays":(schedule.get('days',"nnnnnnn")[3]=='y'),
+                        "fridays":(schedule.get('days',"nnnnnnn")[4]=='y'),
+                        "saturdays":(schedule.get('days',"nnnnnnn")[5]=='y'),
+                        "sundays":(schedule.get('days',"nnnnnnn")[6]=='y'),
+                    }
+                }
+            else:
+                if self._relevantCapabilties.get('departureProfiles', {}).get('supportsSingleTimer', False):
+                    startDateTime = datetime.fromisoformat(schedule.get('date',"2025-01-01")+'T'+schedule.get('time',"00:00"))
+                    _LOGGER.info(f'startDateTime={startDateTime.isoformat()}')
+                    newDepProfileSchedule['singleTimer']= {
+                        "startDateTimeLocal": startDateTime.isoformat(),
+                        }
+                else:
+                    raise SeatInvalidRequestException('Vehicle does not support single timer.')
+            newDepProfileSchedule["profileIds"]= profileIds
+
+            # Now we have to substitute the current departure profile schedule with the given id by the new one
+            data= deepcopy(self.attrs.get('departureProfiles'))
+            if len(data.get('timers', []))<1:
+                raise SeatInvalidRequestException(f'No timers found in departure profile: {data}.')
+            idFound=False
+            for e in range(len(data.get('timers', []))):
+                if data['timers'][e].get('id',-1)==id:
+                    data['timers'][e] = newDepProfileSchedule
+                    idFound=True
+            if idFound:
+                return await self._set_departure_profiles(data, action='set')
+            raise SeatInvalidRequestException(f'Departure profile id {id} not found in {data.get('timers',[])}.')
+        else:
+            _LOGGER.info('Departure profiles are not supported.')
+            raise SeatInvalidRequestException('Departure profiles are not supported.')
 
     async def set_departure_profile_active(self, id=1, action='off'):
         """ Activate/deactivate departure profiles. """
@@ -1552,18 +1644,22 @@ class Vehicle:
             return True
 
     @property
-    def energy_flow(self):
-        """Return true if energy is flowing through charging port."""
-        check = self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('energyFlow', {}).get('content', 'off')
-        if check == 'on':
+    #def energy_flow(self):
+    #    """Return true if energy is flowing through charging port."""
+    def charging_state(self):
+        """Return true if vehicle is charging."""
+        check = self.attrs.get('charging', {}).get('status', {}).get('state', '')
+        if check == 'charging':
             return True
         else:
             return False
 
     @property
-    def is_energy_flow_supported(self):
-        """Energy flow supported."""
-        if self.attrs.get('charger', {}).get('status', {}).get('chargingStatusData', {}).get('energyFlow', False):
+    #def is_energy_flow_supported(self):
+    #    """Energy flow supported."""
+    def is_charging_state_supported(self):
+        """Charging state supported."""
+        if self.attrs.get('charging', {}).get('status', {}).get('state', False):
             return True
 
   # Vehicle location states
