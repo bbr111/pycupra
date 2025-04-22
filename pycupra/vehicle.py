@@ -1644,8 +1644,6 @@ class Vehicle:
             return True
 
     @property
-    #def energy_flow(self):
-    #    """Return true if energy is flowing through charging port."""
     def charging_state(self):
         """Return true if vehicle is charging."""
         check = self.attrs.get('charging', {}).get('status', {}).get('state', '')
@@ -1655,11 +1653,27 @@ class Vehicle:
             return False
 
     @property
-    #def is_energy_flow_supported(self):
-    #    """Energy flow supported."""
     def is_charging_state_supported(self):
         """Charging state supported."""
         if self.attrs.get('charging', {}).get('status', {}).get('state', False):
+            return True
+
+    @property
+    def energy_flow(self):
+        """Return true if energy is flowing to (i.e. charging) or from (i.e. climating with battery power) the battery."""
+        if self.charging_state:
+            return True
+        check = self.attrs.get('charging', {}).get('status', {}).get('state', '')
+        if self.is_electric_climatisation_supported:
+            if self.electric_climatisation and check not in {'charging', 'conservation'}:
+                # electric climatisation is on and car is not charging or conserving power 
+                return True
+        return False
+
+    @property
+    def is_energy_flow_supported(self):
+        """Energy flow supported."""
+        if self.is_charging_state_supported:
             return True
 
   # Vehicle location states

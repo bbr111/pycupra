@@ -71,7 +71,7 @@ RESOURCES = [
 		"door_locked",
 		"electric_climatisation",
 		"electric_range",
-		#"energy_flow",
+		"energy_flow",
 		"external_power",
 		"fuel_level",
 		"hood_closed",

@@ -125,6 +125,8 @@ AUTH_TOKENKEYS = 'https://identity.vwgroup.io/oidc/v1/keys'                     
 # API endpoints
 API_MBB_STATUSDATA = 'https://customer-profile.vwgroup.io/v3/customers/{self._user_id}/mbbStatusData'
 API_PERSONAL_DATA= 'https://customer-profile.vwgroup.io/v3/customers/{self._user_id}/personalData'
+#Other option for personal data is '{baseurl}/v1/users/{self._user_id}'
+
 API_VEHICLES = '{APP_URI}/v2/users/{self._user_id}/garage/vehicles'                                  # Garage info
 API_MYCAR = '{baseurl}/v5/users/{self._user_id}/vehicles/{vin}/mycar'                                # Vehicle status report
 API_CHARGING = '{baseurl}/v1/vehicles/{vin}/charging'                                                # Vehicle charging information 

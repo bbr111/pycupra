@@ -933,6 +933,31 @@ class RequestResults(Sensor):
     def attributes(self):
         return dict(self.vehicle.request_results)
 
+class ChargingState(BinarySensor):
+    def __init__(self):
+        super().__init__(attr="charging_state", name="Charging state", icon="mdi:battery-charging", device_class='power')
+
+    @property
+    def state(self):
+        return self.vehicle.charging_state
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        attr = {}
+        state = self.vehicle.attrs.get('charging', {}).get('status', {}).get('state', '')
+        type = self.vehicle.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('type', '')
+        mode = self.vehicle.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('mode', '')
+        if state in {'charging', 'conservation'}:
+            attr['state']=state
+            if type != '':
+                attr['type']=type
+            if mode != '':
+                attr['mode']=mode
+        return attr
 
 def create_instruments():
     return [
@@ -960,6 +985,7 @@ def create_instruments():
         DepartureProfile1(),
         DepartureProfile2(),
         DepartureProfile3(),
+        ChargingState(),
         Sensor(
             attr="distance",
             name="Odometer",
@@ -1284,11 +1310,11 @@ def create_instruments():
             name="Energy flow",
             device_class="power"
         ),
-        BinarySensor(
-            attr="charging_state",
-            name="Charging state",
-            device_class="power"
-        ),
+        #BinarySensor(
+        #    attr="charging_state",
+        #    name="Charging state",
+        #    device_class="power"
+        #),
         BinarySensor(
             attr="parking_light",
             name="Parking light",
