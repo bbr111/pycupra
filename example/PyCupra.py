@@ -46,6 +46,7 @@ RESOURCES = [
 		"charge_max_ampere",
 		"charger_action_status",
 		"charging",
+        "charge_max_ampere",
         "charge_rate",
         "charging_power",
         "charging_state",
@@ -522,7 +523,7 @@ async def main():
             # Examples for using set functions:
 
             #await demo_set_charger(vehicle, action = "start")                        # action = "start" or "stop"
-            #await demo_set_charger_current(value='reduced')                          # value = 1-255/Maximum/Reduced (PHEV: 252 for reduced and 254 for max, EV: Maximum/Reduced)
+            #await demo_set_charger_current(vehicle, value='reduced')                          # value = 1-255/Maximum/Reduced (PHEV: 252 for reduced and 254 for max, EV: Maximum/Reduced)
 
             #await demo_set_climatisation(vehicle, action = "start", temp=18.0)         # action = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
             #await demo_set_climatisation_temp(vehicle, temp = 18.0)                  # temp = integer from 16 to 30

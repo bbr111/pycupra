@@ -948,11 +948,14 @@ class ChargingState(BinarySensor):
     @property
     def attributes(self):
         attr = {}
-        state = self.vehicle.attrs.get('charging', {}).get('status', {}).get('state', '')
+        #state = self.vehicle.attrs.get('charging', {}).get('status', {}).get('state', '')
+        #type = self.vehicle.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('type', '')
+        #mode = self.vehicle.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('mode', '')
+        state = self.vehicle.attrs.get('mycar', {}).get('services', {}).get('charging', {}).get('status', '')
         type = self.vehicle.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('type', '')
-        mode = self.vehicle.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('mode', '')
-        if state in {'charging', 'conservation'}:
-            attr['state']=state
+        mode = self.vehicle.attrs.get('mycar', {}).get('services', {}).get('charging', {}).get('chargeMode', '')
+        if state in {'charging','Charging', 'conservation','Conservation'}:
+            attr['state']=state.lower()
             if type != '':
                 attr['type']=type
             if mode != '':
@@ -1110,8 +1113,8 @@ def create_instruments():
             attr="charge_max_ampere",
             name="Charger max ampere",
             icon="mdi:flash",
-            unit="A",
-            device_class="current"
+            #unit="A",
+            #device_class="current"
         ),
         Sensor(
             attr="climatisation_target_temperature",

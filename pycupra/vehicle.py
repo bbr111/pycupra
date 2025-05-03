@@ -129,9 +129,20 @@ class Vehicle:
         # Fetch all data if car is not deactivated
         if not self.deactivated:
             try:
+                if self._connection._session_nightlyUpdateReduction:
+                    # nightlyUpdateReduction is activated
+                    if datetime.now(tz=None).hour<5 or datetime.now(tz=None).hour>=22:
+                        # current time is within the night interval
+                        fullUpdateExpired = datetime.now(tz=None) - timedelta(seconds= 1100)
+                        if hasattr(self, '_last_full_update'):
+                            _LOGGER.debug(f'last_full_update= {self._last_full_update}, fullUpdateExpired= {fullUpdateExpired}.')
+                        if updateType!=1 and (hasattr(self, '_last_full_update') and self._last_full_update>fullUpdateExpired):
+                            _LOGGER.debug('Nightly update reduction is active and current time within 22:00 and 5:00. So we skip small update.')
+                            return True
+
                 # Data to be updated most often
                 await asyncio.gather(
-                    self.get_charger(),
+                    #self.get_charger(),
                     self.get_basiccardata(),
                     self.get_statusreport(),
                     return_exceptions=True
@@ -146,6 +157,8 @@ class Vehicle:
                 
                 # Data to be updated less often
                 await asyncio.gather(
+                    #self.get_statusreport(),
+                    self.get_charger(),
                     self.get_preheater(),
                     self.get_climater(),
                     self.get_trip_statistic(), 
@@ -320,7 +333,11 @@ class Vehicle:
                 if 1 <= int(value) <= 255:
                     # VW-Group API charger current request
                     if self._relevantCapabilties.get('charging', {}).get('active', False):
-                        data = {'action': {'settings': {'maxChargeCurrentAC': int(value)}, 'type': 'setSettings'}}
+                        data = {'maxChargeCurrentAc': int(value)}
+                        if int(value)==252:
+                            data = {'maxChargeCurrentAc': 'reduced'}
+                        if int(value)==254:
+                            data = {'maxChargeCurrentAc': 'maximum'}
                 else:
                     _LOGGER.error(f'Set charger maximum current to {value} is not supported.')
                     raise SeatInvalidRequestException(f'Set charger maximum current to {value} is not supported.')
@@ -330,9 +347,7 @@ class Vehicle:
                     # VW-Group API charger current request
                     if self._relevantCapabilties.get('charging', {}).get('active', False):
                         value = 'maximum' if value in ['Maximum', 'maximum', 'Max', 'max'] else 'reduced'
-                        data = {'settings': 
-                                {'maxChargeCurrentAC': value}
-                                }
+                        data = {'maxChargeCurrentAc': value}
                 else:
                     _LOGGER.error(f'Set charger maximum current to {value} is not supported.')
                     raise SeatInvalidRequestException(f'Set charger maximum current to {value} is not supported.')
@@ -344,7 +359,7 @@ class Vehicle:
             _LOGGER.error('No charger support.')
             raise SeatInvalidRequestException('No charger support.')
 
-    async def set_charger(self, action, **data):
+    async def set_charger(self, action, data=None):
         """Charging actions."""
         if not self._relevantCapabilties.get('charging', {}).get('active', False):
             _LOGGER.info('Remote start/stop of charger is not supported.')
@@ -361,7 +376,7 @@ class Vehicle:
                 mode='start'
             elif action in ['stop', 'Stop', 'Off', 'off']:
                 mode='stop'
-            elif isinstance(action.get('action', None), dict):
+            elif action=='settings':
                 mode=action
             else:
                 _LOGGER.error(f'Invalid charger action: {action}. Must be either start, stop or setSettings')
@@ -386,6 +401,7 @@ class Vehicle:
                 while not actionSuccessful and retry < 2:
                     await asyncio.sleep(15)
                     await self.get_charger()
+                    await self.get_basiccardata() # We get both, get_charger() and get_basiccardata()
                     if mode == 'start':
                         if self.charging:
                             actionSuccessful = True
@@ -393,7 +409,7 @@ class Vehicle:
                         if not self.charging:
                             actionSuccessful = True
                     elif mode == 'settings':
-                        if data.get('settings',0).get('maxChargeCurrentAC','') ==  self.charge_max_ampere:
+                        if data.get('maxChargeCurrentAc','') ==  self.charge_max_ampere:
                             actionSuccessful = True
                     else:
                         _LOGGER.error(f'Missing code in vehicle._set_charger() for mode {mode}')
@@ -1473,16 +1489,22 @@ class Vehicle:
     @property
     def charging(self):
         """Return battery level"""
-        cstate = self.attrs.get('charging').get('status').get('charging').get('state','')
+        #cstate = self.attrs.get('charging').get('status').get('charging').get('state','')
+        cstate = self.attrs.get('mycar',{}).get('services',{}).get('charging',{}).get('status','')
         return 1 if cstate in ['charging', 'Charging'] else 0
 
     @property
     def is_charging_supported(self):
         """Return true if charging is supported"""
-        if self.attrs.get('charging', False):
-            if 'status' in self.attrs.get('charging', {}):
-                if 'charging' in self.attrs.get('charging')['status']:
-                    if 'state' in self.attrs.get('charging')['status']['charging']:
+        #if self.attrs.get('charging', False):
+        #    if 'status' in self.attrs.get('charging', {}):
+        #        if 'charging' in self.attrs.get('charging')['status']:
+        #            if 'state' in self.attrs.get('charging')['status']['charging']:
+        #                return True
+        if self.attrs.get('mycar', False):
+            if 'services' in self.attrs.get('mycar', {}):
+                if 'charging' in self.attrs.get('mycar')['services']:
+                    if 'status' in self.attrs.get('mycar')['services']['charging']:
                         return True
         return False
 
@@ -1504,26 +1526,33 @@ class Vehicle:
     @property
     def battery_level(self):
         """Return battery level"""
-        if self.attrs.get('charging', False):
-            return int(self.attrs.get('charging').get('status', {}).get('battery', {}).get('currentSocPercentage', 0))
+        #if self.attrs.get('charging', False):
+        #    return int(self.attrs.get('charging').get('status', {}).get('battery', {}).get('currentSocPercentage', 0))
+        if self.attrs.get('mycar', False):
+            return int(self.attrs.get('mycar',{}).get('services', {}).get('charging', {}).get('currentPct', 0))
         else:
             return 0
 
     @property
     def is_battery_level_supported(self):
         """Return true if battery level is supported"""
-        if self.attrs.get('charging', False):
-            if 'status' in self.attrs.get('charging'):
-                if 'battery' in self.attrs.get('charging')['status']:
-                    if 'currentSocPercentage' in self.attrs.get('charging')['status']['battery']:
+        #if self.attrs.get('charging', False):
+        #    if 'status' in self.attrs.get('charging'):
+        #        if 'battery' in self.attrs.get('charging')['status']:
+        #            if 'currentSocPercentage' in self.attrs.get('charging')['status']['battery']:
+        #                return True
+        if self.attrs.get('mycar', False):
+            if 'services' in self.attrs.get('mycar'):
+                if 'charging' in self.attrs.get('mycar')['services']:
+                    if 'currentPct' in self.attrs.get('mycar')['services']['charging']:
                         return True
         return False
 
     @property
     def charge_max_ampere(self):
         """Return charger max ampere setting."""
-        if self.attrs.get('charger', False):
-            return self.attrs.get('charger').get('info').get('settings').get('maxChargeCurrentAC')
+        if self.attrs.get('charging', False):
+            return self.attrs.get('charging').get('info').get('settings').get('maxChargeCurrentAc')
         return 0
 
     @property
@@ -1532,7 +1561,7 @@ class Vehicle:
         if self.attrs.get('charging', False):
             if 'info' in self.attrs.get('charging', {}):
                 if 'settings' in self.attrs.get('charging')['info']:
-                    if 'maxChargeCurrentAC' in self.attrs.get('charging', {})['info']['settings']:
+                    if 'maxChargeCurrentAc' in self.attrs.get('charging', {})['info']['settings']:
                         return True
         return False
 
@@ -1575,9 +1604,12 @@ class Vehicle:
     @property
     def charging_time_left(self):
         """Return minutes to charging complete"""
-        if self.external_power:
-            if self.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('remainingTimeInMinutes', False):
-                minutes = int(self.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('remainingTimeInMinutes', 0))
+        #if self.external_power:
+        if self.charging:
+            #if self.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('remainingTimeInMinutes', False):
+            #    minutes = int(self.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('remainingTimeInMinutes', 0))
+            if self.attrs.get('mycar', {}).get('services', {}).get('charging', {}).get('remainingTime', False):
+                minutes = int(self.attrs.get('mycar', {}).get('services', {}).get('charging', {}).get('remainingTime', 0))
             else:
                 minutes = 0
             return minutes
@@ -1646,8 +1678,9 @@ class Vehicle:
     @property
     def charging_state(self):
         """Return true if vehicle is charging."""
-        check = self.attrs.get('charging', {}).get('status', {}).get('state', '')
-        if check == 'charging':
+        #check = self.attrs.get('charging', {}).get('status', {}).get('state', '')
+        check = self.attrs.get('mycar',{}).get('services',{}).get('charging',{}).get('status','')
+        if check in ('charging','Charging'):
             return True
         else:
             return False
@@ -1655,17 +1688,23 @@ class Vehicle:
     @property
     def is_charging_state_supported(self):
         """Charging state supported."""
-        if self.attrs.get('charging', {}).get('status', {}).get('state', False):
-            return True
+        #if self.attrs.get('charging', {}).get('status', {}).get('state', False):
+        #    return True
+        if self.attrs.get('mycar', False):
+            if 'services' in self.attrs.get('mycar', {}):
+                if 'charging' in self.attrs.get('mycar')['services']:
+                    if 'status' in self.attrs.get('mycar')['services']['charging']:
+                        return True
 
     @property
     def energy_flow(self):
         """Return true if energy is flowing to (i.e. charging) or from (i.e. climating with battery power) the battery."""
         if self.charging_state:
             return True
-        check = self.attrs.get('charging', {}).get('status', {}).get('state', '')
+        #check = self.attrs.get('charging', {}).get('status', {}).get('state', '')
+        check = self.attrs.get('mycar',{}).get('services',{}).get('charging',{}).get('status','')
         if self.is_electric_climatisation_supported:
-            if self.electric_climatisation and check not in {'charging', 'conservation'}:
+            if self.electric_climatisation and check not in {'charging','Charging', 'conservation','Conservation'}:
                 # electric climatisation is on and car is not charging or conserving power 
                 return True
         return False
@@ -2921,7 +2960,8 @@ class Vehicle:
     @property
     def is_request_results_supported(self):
         """Request results is supported if in progress is supported."""
-        return self.is_request_in_progress_supported
+        return False # deactivated because it provides no usefull information
+        #return self.is_request_in_progress_supported
 
     @property
     def requests_remaining(self):
@@ -2937,8 +2977,9 @@ class Vehicle:
 
     @property
     def is_requests_remaining_supported(self):
-        if self.is_request_in_progress_supported:
-            return True if self._requests.get('remaining', False) else False
+        return False # deactivated because it provides no usefull information
+        #if self.is_request_in_progress_supported:
+        #    return True if self._requests.get('remaining', False) else False
 
  #### Helper functions ####
     def __str__(self):

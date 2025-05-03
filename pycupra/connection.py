@@ -108,11 +108,12 @@ TIMEOUT = timedelta(seconds=90)
 class Connection:
     """ Connection to Connect services """
   # Init connection class
-    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, **optional):
+    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, nightlyUpdateReduction=False, **optional):
         """ Initialize """
         self._session = session
         self._lock = asyncio.Lock()
         self._session_fulldebug = fulldebug
+        self._session_nightlyUpdateReduction = nightlyUpdateReduction
         self._session_headers = HEADERS_SESSION.get(brand).copy()
         self._session_base = BASE_SESSION
         self._session_auth_headers = HEADERS_AUTH.copy()
@@ -1369,6 +1370,8 @@ class Connection:
         if mode in {'start', 'stop'}:
             capability='charging'
             return await self._setViaAPI(eval(f"f'{API_REQUESTS}/{mode}'"))
+        elif mode=='settings':
+            return await self._setViaAPI(eval(f"f'{API_CHARGING}/{mode}'"), json=data)
         else:
             _LOGGER.error(f'Not yet implemented. Mode: {mode}. Command ignored')
             raise
