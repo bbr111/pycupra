@@ -1566,6 +1566,21 @@ class Vehicle:
         return False
 
     @property
+    def slow_charge(self):
+        """Return charger max ampere setting."""
+        if self.charge_max_ampere=='reduced':
+            return True
+        return False
+
+    @property
+    def is_slow_charge_supported(self):
+        """Return true if Slow Charge is supported"""
+        if self.is_charge_max_ampere_supported:
+            if self.charge_max_ampere in ('reduced', 'maximum'):
+                return True
+        return False
+
+    @property
     def charging_cable_locked(self):
         """Return plug locked state"""
         response = ''

@@ -715,6 +715,32 @@ class PHeaterVentilation(Switch):
         return dict(last_result = self.vehicle.pheater_action_status)
 
 
+class SlowCharge(Switch):
+    def __init__(self):
+        super().__init__(attr="slow_charge", name="Slow charge", icon="mdi:battery")
+
+    @property
+    def state(self):
+        return self.vehicle.slow_charge
+
+    async def turn_on(self):
+        await self.vehicle.set_charger_current('reduced')
+        #await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_charger_current('maximum')
+        #await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.charger_action_status)
+
+
 class Warnings(Sensor):
     def __init__(self):
         super().__init__(attr="warnings", name="Warnings", icon="mdi:alarm-light")
@@ -981,6 +1007,7 @@ def create_instruments():
         #CombustionClimatisationClimate(),
         Charging(),
         Warnings(),
+        SlowCharge(),
         RequestResults(),
         DepartureTimer1(),
         DepartureTimer2(),

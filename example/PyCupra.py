@@ -97,6 +97,7 @@ RESOURCES = [
 		"requests_remaining",
 		"service_inspection",
 		"service_inspection_distance",
+        "slow_charge",
 		"sunroof_closed",
 		"trip_last_average_auxillary_consumption",
 		"trip_last_average_electric_consumption",
