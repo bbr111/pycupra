@@ -1,6 +1,6 @@
 from .fcmpushclient import FcmPushClient, FcmPushClientConfig, FcmPushClientRunState
 from .fcmregister import FcmRegisterConfig
-from .mcs_pb2 import (  # pylint: disable=no-name-in-module
+from .proto.mcs_pb2 import (  # pylint: disable=no-name-in-module
     Close,
     DataMessageStanza,
     HeartbeatAck,
@@ -12,15 +12,8 @@ from .mcs_pb2 import (  # pylint: disable=no-name-in-module
     StreamErrorStanza,
 )
 
-from .android_checkin_pb2 import (
-    DEVICE_CHROME_BROWSER,
-    AndroidCheckinProto,
-    ChromeBuildProto,
-)
-from .checkin_pb2 import (
-    AndroidCheckinRequest,
-    AndroidCheckinResponse,
-)
+from .proto import android_checkin_pb2 
+from .proto import checkin_pb2
 
 __all__ = [
     "FcmPushClientConfig",

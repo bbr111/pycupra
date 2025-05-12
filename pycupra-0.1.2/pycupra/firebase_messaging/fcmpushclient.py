@@ -31,7 +31,7 @@ from .const import (
     MCS_VERSION,
 )
 from .fcmregister import FcmRegister, FcmRegisterConfig
-from .mcs_pb2 import (  # pylint: disable=no-name-in-module
+from .proto.mcs_pb2 import (  # pylint: disable=no-name-in-module
     Close,
     DataMessageStanza,
     HeartbeatAck,

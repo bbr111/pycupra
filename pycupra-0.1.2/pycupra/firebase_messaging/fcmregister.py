@@ -26,12 +26,12 @@ from .const import (
     GCM_SERVER_KEY_B64,
     SDK_VERSION,
 )
-from .android_checkin_pb2 import (
+from .proto.android_checkin_pb2 import (
     DEVICE_CHROME_BROWSER,
     AndroidCheckinProto,
     ChromeBuildProto,
 )
-from .checkin_pb2 import (
+from .proto.checkin_pb2 import (
     AndroidCheckinRequest,
     AndroidCheckinResponse,
 )
