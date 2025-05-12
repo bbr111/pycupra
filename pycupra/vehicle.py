@@ -20,8 +20,14 @@ from .exceptions import (
     SeatRequestInProgressException
 )
 from .const import (
-    APP_URI
+    APP_URI,
+    FIREBASE_STATUS_NOT_INITIALISED,
+    FIREBASE_STATUS_ACTIVATED,
+    FIREBASE_STATUS_ACTIVATION_FAILED,
+    FIREBASE_STATUS_NOT_WANTED,
 )
+
+from .firebase import Firebase, readFCMCredsFile, writeFCMCredsFile
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +47,10 @@ class Vehicle:
         self._discovered = False
         self._dashboard = None
         self._states = {}
+        self._firebaseCredentialsFileName = None
+        self._firebaseLastMessageId = ''
+        self.firebaseStatus = FIREBASE_STATUS_NOT_INITIALISED
+        self.updateCallback = None
 
         self._requests = {
             'departuretimer': {'status': '', 'timestamp': DATEZERO},
@@ -75,6 +85,13 @@ class Vehicle:
         }
 
         self._last_full_update = datetime.now(tz=None) - timedelta(seconds=1200)
+        # Timestamps for the last API calls
+        self._last_get_statusreport = datetime.now(tz=None) - timedelta(seconds=600)
+        self._last_get_departure_timers = datetime.now(tz=None) - timedelta(seconds=600)
+        self._last_get_departure_profiles = datetime.now(tz=None) - timedelta(seconds=600)
+        self._last_get_charger = datetime.now(tz=None) - timedelta(seconds=600)
+        self._last_get_climater = datetime.now(tz=None) - timedelta(seconds=600)
+        self._last_get_mileage = datetime.now(tz=None) - timedelta(seconds=600)
 
 
  #### API get and set functions ####
@@ -114,7 +131,7 @@ class Vehicle:
 
         self._discovered = datetime.now()
 
-    async def update(self, updateType=0):
+    async def update(self, updateType=0) -> bool:
         """Try to fetch data for all known API endpoints."""
         # Update vehicle information if not discovered or stale information
         if not self._discovered:
@@ -129,14 +146,25 @@ class Vehicle:
         # Fetch all data if car is not deactivated
         if not self.deactivated:
             try:
+                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
+                    fullUpdateExpired = datetime.now(tz=None) - timedelta(seconds= 1700)
+                    oldMileage = self.distance
+                    if self._last_get_mileage < datetime.now(tz=None) - timedelta(seconds= 300):
+                        await self.get_mileage()
+                        if self.distance > oldMileage:
+                            # self.distance has changed. So it's time for a full update
+                            _LOGGER.debug(f'Mileage has changed. Old value: {oldMileage}, new value {self.distance}. This calls for a full update.')
+                            updateType = 1
+                else:
+                    fullUpdateExpired = datetime.now(tz=None) - timedelta(seconds= 1100)
+
                 if self._connection._session_nightlyUpdateReduction:
                     # nightlyUpdateReduction is activated
                     if datetime.now(tz=None).hour<5 or datetime.now(tz=None).hour>=22:
                         # current time is within the night interval
-                        fullUpdateExpired = datetime.now(tz=None) - timedelta(seconds= 1100)
                         if hasattr(self, '_last_full_update'):
                             _LOGGER.debug(f'last_full_update= {self._last_full_update}, fullUpdateExpired= {fullUpdateExpired}.')
-                        if updateType!=1 and (hasattr(self, '_last_full_update') and self._last_full_update>fullUpdateExpired):
+                        if updateType<1 and (hasattr(self, '_last_full_update') and self._last_full_update>fullUpdateExpired):
                             _LOGGER.debug('Nightly update reduction is active and current time within 22:00 and 5:00. So we skip small update.')
                             return True
 
@@ -148,7 +176,6 @@ class Vehicle:
                     return_exceptions=True
                 )
 
-                fullUpdateExpired = datetime.now(tz=None) - timedelta(seconds= 1100)
                 if hasattr(self, '_last_full_update'):
                     _LOGGER.debug(f'last_full_update= {self._last_full_update}, fullUpdateExpired= {fullUpdateExpired}.')
                 if updateType!=1 and (hasattr(self, '_last_full_update') and self._last_full_update>fullUpdateExpired):
@@ -156,6 +183,9 @@ class Vehicle:
                     return True
                 
                 # Data to be updated less often
+                if self.firebaseStatus != FIREBASE_STATUS_ACTIVATED:
+                    await self.get_mileage() 
+
                 await asyncio.gather(
                     #self.get_statusreport(),
                     self.get_charger(),
@@ -167,7 +197,6 @@ class Vehicle:
                     self.get_vehicleHealthWarnings(),
                     self.get_departure_timers(),
                     self.get_departure_profiles(),
-                    self.get_mileage(),
                     #self.get_modelimageurl(), #commented out, because getting the images discover() should be sufficient
                     return_exceptions=True
                 )
@@ -198,6 +227,7 @@ class Vehicle:
         data = await self._connection.getMileage(self.vin, self._apibase)
         if data:
             self._states.update(data)
+            self._last_get_mileage = datetime.now(tz=None)
 
     async def get_preheater(self):
         """Fetch pre-heater data if function is enabled."""
@@ -218,10 +248,11 @@ class Vehicle:
             data = await self._connection.getClimater(self.vin, self._apibase)
             if data:
                 self._states.update(data)
+                self._last_get_climater = datetime.now(tz=None)
             else:
                 _LOGGER.debug('Could not fetch climater data')
-        else:
-            self._requests.pop('climatisation', None)
+        #else:
+        #    self._requests.pop('climatisation', None)
 
     async def get_trip_statistic(self):
         """Fetch trip data if function is enabled."""
@@ -264,6 +295,7 @@ class Vehicle:
             data = await self._connection.getVehicleStatusReport(self.vin, self._apibase)
             if data:
                 self._states.update(data)
+                self._last_get_statusreport = datetime.now(tz=None)
             else:
                 _LOGGER.debug('Could not fetch status report')
 
@@ -282,6 +314,7 @@ class Vehicle:
             data = await self._connection.getCharger(self.vin, self._apibase)
             if data:
                 self._states.update(data)
+                self._last_get_charger = datetime.now(tz=None)
             else:
                 _LOGGER.debug('Could not fetch charger data')
 
@@ -291,6 +324,7 @@ class Vehicle:
             data = await self._connection.getDeparturetimer(self.vin, self._apibase)
             if data:
                 self._states.update(data)
+                self._last_get_departure_timers = datetime.now(tz=None)
             else:
                 _LOGGER.debug('Could not fetch timers')
 
@@ -300,6 +334,7 @@ class Vehicle:
             data = await self._connection.getDepartureprofiles(self.vin, self._apibase)
             if data:
                 self._states.update(data)
+                self._last_get_departure_profiles = datetime.now(tz=None)
             else:
                 _LOGGER.debug('Could not fetch timers')
 
@@ -336,8 +371,10 @@ class Vehicle:
                         data = {'maxChargeCurrentAc': int(value)}
                         if int(value)==252:
                             data = {'maxChargeCurrentAc': 'reduced'}
-                        if int(value)==254:
+                        elif int(value)==254:
                             data = {'maxChargeCurrentAc': 'maximum'}
+                        else:
+                            data = {'maxChargeCurrentAcInAmperes': int(value)}
                 else:
                     _LOGGER.error(f'Set charger maximum current to {value} is not supported.')
                     raise SeatInvalidRequestException(f'Set charger maximum current to {value} is not supported.')
@@ -395,6 +432,10 @@ class Vehicle:
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0)
                 }
+                # if firebaseStatus is FIREBASE_STATUS_ACTIVATED, the request is assumed successful. Waiting for push notification before rereading status
+                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
+                    _LOGGER.debug('POST request for charger assumed successful. Waiting for push notification')
+                    return True
                 # Update the charger data and check, if they have changed as expected
                 retry = 0
                 actionSuccessful = False
@@ -409,7 +450,9 @@ class Vehicle:
                         if not self.charging:
                             actionSuccessful = True
                     elif mode == 'settings':
-                        if data.get('maxChargeCurrentAc','') ==  self.charge_max_ampere:
+                        if data.get('maxChargeCurrentAc','') ==  self.charge_max_ampere: # In case 'maximum', 'reduced'
+                            actionSuccessful = True
+                        if data.get('maxChargeCurrentAcInAmperes',0) ==  self.charge_max_ampere: # In case of a numerical value
                             actionSuccessful = True
                     else:
                         _LOGGER.error(f'Missing code in vehicle._set_charger() for mode {mode}')
@@ -641,6 +684,10 @@ class Vehicle:
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
+                # if firebaseStatus is FIREBASE_STATUS_ACTIVATED, the request is assumed successful. Waiting for push notification before rereading status
+                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
+                    _LOGGER.debug('POST request for change of departure timers assumed successful. Waiting for push notification')
+                    return True
                 # Update the departure timers data and check, if they have changed as expected
                 retry = 0
                 actionSuccessful = False
@@ -828,6 +875,10 @@ class Vehicle:
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
+                # if firebaseStatus is FIREBASE_STATUS_ACTIVATED, the request is assumed successful. Waiting for push notification before rereading status
+                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
+                    _LOGGER.debug('POST request for change of departure profiles assumed successful. Waiting for push notification')
+                    return True
                 # Update the departure profile data and check, if they have changed as expected
                 retry = 0
                 actionSuccessful = False
@@ -1006,6 +1057,10 @@ class Vehicle:
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
+                # if firebaseStatus is FIREBASE_STATUS_ACTIVATED, the request is assumed successful. Waiting for push notification before rereading status
+                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
+                    _LOGGER.debug('POST request for climater assumed successful. Waiting for push notification')
+                    return True
                 # Update the climater data and check, if they have changed as expected
                 retry = 0
                 actionSuccessful = False
@@ -1119,6 +1174,10 @@ class Vehicle:
                     'status': response.get('state', 'Unknown'),
                     'id': response.get('id', 0),
                 }
+                # if firebaseStatus is FIREBASE_STATUS_ACTIVATED, the request is assumed successful. Waiting for push notification before rereading status
+                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
+                    _LOGGER.debug('POST request for lock/unlock assumed successful. Waiting for push notification')
+                    return True
                 # Update the lock data and check, if they have changed as expected
                 retry = 0
                 actionSuccessful = False
@@ -1552,7 +1611,10 @@ class Vehicle:
     def charge_max_ampere(self):
         """Return charger max ampere setting."""
         if self.attrs.get('charging', False):
-            return self.attrs.get('charging').get('info').get('settings').get('maxChargeCurrentAc')
+            if self.attrs.get('charging',{}).get('info',{}).get('settings',{}).get('maxChargeCurrentAcInAmperes', None):
+                return self.attrs.get('charging',{}).get('info',{}).get('settings',{}).get('maxChargeCurrentAcInAmperes', 0)
+            else:
+                return self.attrs.get('charging').get('info').get('settings').get('maxChargeCurrentAc')
         return 0
 
     @property
@@ -1728,6 +1790,17 @@ class Vehicle:
     def is_energy_flow_supported(self):
         """Energy flow supported."""
         if self.is_charging_state_supported:
+            return True
+
+    @property
+    def target_soc(self):
+        """Return the target soc."""
+        return self.attrs.get('charging', {}).get('info', {}).get('settings', {}).get('targetSoc', 0)
+
+    @property
+    def is_target_soc_supported(self):
+        """Target state of charge supported."""
+        if self.attrs.get('charging', {}).get('info', {}).get('settings', {}).get('targetSoc', False):
             return True
 
   # Vehicle location states
@@ -2956,7 +3029,7 @@ class Vehicle:
     @property
     def is_request_in_progress_supported(self):
         """Request in progress is always supported."""
-        return True
+        return False
 
     @property
     def request_results(self):
@@ -2966,7 +3039,7 @@ class Vehicle:
             'state': self._requests.get('state', 'N/A'),
         }
         for section in self._requests:
-            if section in ['departuretimer', 'batterycharge', 'climatisation', 'refresh', 'lock', 'preheater']:
+            if section in ['departuretimer', 'departureprofiles', 'batterycharge', 'climatisation', 'refresh', 'lock', 'preheater']:
                 timestamp = self._requests.get(section, {}).get('timestamp', DATEZERO)
                 data[section] = self._requests[section].get('status', 'N/A')
                 data[section+'_timestamp'] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
@@ -3011,3 +3084,174 @@ class Vehicle:
             indent=4,
             default=serialize
         )
+
+
+    async def initialiseFirebase(self, firebaseCredentialsFileName=None, updateCallback=None):
+        # Check if firebase shall be used
+        if firebaseCredentialsFileName == None:
+            _LOGGER.debug('No use of firebase wanted.')
+            self.firebaseStatus = FIREBASE_STATUS_NOT_WANTED
+            return self.firebaseStatus
+        self._firebaseCredentialsFileName = firebaseCredentialsFileName
+
+        # Check if firebase not already initialised
+        if self.firebaseStatus!= FIREBASE_STATUS_NOT_INITIALISED:
+            _LOGGER.debug(f'No need to initialise firebase anymore. Firebase status={self.firebaseStatus}')
+            return self.firebaseStatus
+        
+        # Read the firebase credentials file and check if an existing subscription has to be deleted
+        loop = asyncio.get_running_loop()
+        credentials = await loop.run_in_executor(None, readFCMCredsFile, firebaseCredentialsFileName)
+        subscribedVin = credentials.get('subscription',{}).get('vin','')
+        subscribedUserId = credentials.get('subscription',{}).get('userId','')
+        subscribedBrand = credentials.get('subscription',{}).get('brand','')
+        if subscribedVin != '' and subscribedUserId != '':
+            if subscribedVin != self.vin or subscribedUserId != self._connection._user_id or subscribedBrand != self._connection._session_auth_brand:
+                _LOGGER.debug(f'Change of vin, userId or brand. Deleting subscription for vin={subscribedVin} and userId={subscribedUserId}.')
+                result = await self._connection.deleteSubscription(credentials)
+
+        # Start firebase
+        fb = Firebase()
+        success = await fb.firebaseStart(self.onNotification, firebaseCredentialsFileName, brand=self._connection._session_auth_brand)
+        if not success:
+            self.firebaseStatus = FIREBASE_STATUS_ACTIVATION_FAILED
+            _LOGGER.warning('Activation of firebase messaging failed.')
+            return self.firebaseStatus
+        
+        self.updateCallback = updateCallback
+        # Read possibly new credentials and subscribe vin and userId for push notifications
+        loop = asyncio.get_running_loop()
+        credentials = await loop.run_in_executor(None, readFCMCredsFile, firebaseCredentialsFileName)
+        result = await self._connection.subscribe(self.vin, credentials)
+        _LOGGER.debug(f'Result of subscription={result}.')
+        credentials['subscription']= {
+            'vin' : self.vin,
+            'userId' : self._connection._user_id,
+            'brand' : self._connection._session_auth_brand,
+            'id' : result.get('id', ''),
+        }
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, writeFCMCredsFile, credentials, firebaseCredentialsFileName)
+
+        await asyncio.sleep(5) # Wait to let the first notifications 
+        self.firebaseStatus = FIREBASE_STATUS_ACTIVATED
+        _LOGGER.info('Activation of firebase messaging was successful.')
+        return self.firebaseStatus
+
+
+
+    async def onNotification(self, obj, notification, data_message):
+        # Do something with the notification
+        _LOGGER.debug(f'Received push notification: notification id={notification}, type={obj.get('data',{}).get('type','')}, requestId={obj.get('data',{}).get('requestId','[None]')}')
+        _LOGGER.debug(f'   data_message={data_message}, payload={obj.get('data',{}).get('payload','[None]')}')
+
+        #temporary output of notifications in a file
+        if self.updateCallback == self.update:
+            self.storeFirebaseNotifications(obj, notification, data_message)
+
+        if self.firebaseStatus != FIREBASE_STATUS_ACTIVATED:
+            _LOGGER.info(f'While firebase is not fully activated, received notifications are just acknoledged.')
+            # As long as the firebase status is not set to activated, ignore the notifications
+            return False 
+ 
+        type = obj.get('data',{}).get('type','')
+        requestId = obj.get('data',{}).get('requestId','')
+        openRequest = -1
+        if requestId != '':
+            _LOGGER.info(f'Received notification of type \'{type}\', request id={requestId} ')
+        else:
+            _LOGGER.info(f'Received notification of type \'{type}\' ')
+
+        if notification == self._firebaseLastMessageId:
+            _LOGGER.info(f'Received notification {notification} again. Just acknoledging it, nothing to do.')
+            return False
+
+        self._firebaseLastMessageId = notification # save the id of the last notification
+        if type in ('vehicle-access-locked-successful', 'vehicle-access-unlocked-successful'): # vehicle was locked/unlocked
+            if self._requests.get('lock', {}).get('id', None):
+                openRequest= self._requests.get('lock', {}).get('id', None)
+                if openRequest == requestId:
+                    _LOGGER.debug(f'The notification closes an open request initiated by PyCupra.')
+                    self._requests.get('lock', {}).pop('id')
+            if (self._last_get_statusreport < datetime.now(tz=None) - timedelta(seconds= 10)) or openRequest == requestId:
+                # Update the status report only if the last one is older than timedelta or if the notification belongs to an open request initiated by PyCupra
+                #await self.get_statusreport() # Call not needed because it's part of updateCallback(2)
+                if self.updateCallback:
+                    await self.updateCallback(2)
+        elif type ==  'departure-times-updated': 
+            if self._requests.get('departuretimer', {}).get('id', None):
+                openRequest= self._requests.get('departuretimer', {}).get('id', None)
+                if openRequest == requestId:
+                    _LOGGER.debug(f'The notification closes an open request initiated by PyCupra.')
+                    self._requests.get('departuretimer', {}).pop('id')
+            if (self._last_get_departure_timers < datetime.now(tz=None) - timedelta(seconds= 30)) or openRequest == requestId:
+                # Update the departure timers only if the last one is older than timedelta or if the notification belongs to an open request initiated by PyCupra
+                await self.get_departure_timers()
+                if self.updateCallback:
+                    await self.updateCallback(2)
+        elif type ==  'departure-profiles-updated': # !!! Is this the right type?
+            if self._requests.get('departureprofile', {}).get('id', None):
+                openRequest= self._requests.get('departureprofile', {}).get('id', None)
+                if openRequest == requestId:
+                    _LOGGER.debug(f'The notification closes an open request initiated by PyCupra.')
+                self._requests.get('departureprofile', {}).pop('id')
+            if (self._last_get_departure_profiles < datetime.now(tz=None) - timedelta(seconds= 30)) or openRequest == requestId:
+                # Update the departure profiles only if the last one is older than timedelta or if the notification belongs to an open request initiated by PyCupra
+                await self.get_departure_profiles()
+                if self.updateCallback:
+                    await self.updateCallback(2)
+        elif type in ('charging-status-changed', 'charging-started', 'charging-stopped'):
+            if self._requests.get('batterycharge', {}).get('id', None):
+                openRequest= self._requests.get('batterycharge', {}).get('id', None)
+                if openRequest == requestId:
+                    _LOGGER.debug(f'The notification closes an open request initiated by PyCupra.')
+                    self._requests.get('batterycharge', {}).pop('id')
+            if (self._last_get_charger < datetime.now(tz=None) - timedelta(seconds= 10)) or openRequest == requestId:
+                # Update the charging data only if the last one is older than timedelta or if the notification belongs to an open request initiated by PyCupra
+                await self.get_charger()
+                if self.updateCallback:
+                    await self.updateCallback(2)
+            else:
+                _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last get_charger was at {self._last_get_charger}. So no need to update.')
+        elif type in ('climatisation-status-changed','climatisation-started', 'climatisation-stopped'):
+            if self._requests.get('climatisation', {}).get('id', None):
+                openRequest= self._requests.get('climatisation', {}).get('id', None)
+                if openRequest == requestId:
+                    _LOGGER.debug(f'The notification closes an open request initiated by PyCupra.')
+                    self._requests.get('climatisation', {}).pop('id')
+            if (self._last_get_climater < datetime.now(tz=None) - timedelta(seconds= 10)) or openRequest == requestId:
+                # Update the climatisation data only if the last one is older than timedelta or if the notification belongs to an open request initiated by PyCupra
+                await self.get_climater()
+                if self.updateCallback:
+                    await self.updateCallback(2)
+            else:
+                _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last get_climater was at {self._last_get_climater}. So no need to update.')
+        elif type == 'vehicle-wakeup-succeeded':
+            if self._requests.get('refresh', {}).get('id', None):
+                openRequest= self._requests.get('refresh', {}).get('id', None)
+                if openRequest == requestId:
+                    _LOGGER.debug(f'The notification closes an open request initiated by PyCupra.')
+                    self._requests.get('refresh', {}).pop('id')
+            if (self._last_full_update < datetime.now(tz=None) - timedelta(seconds= 30)) or openRequest == requestId:
+                # Do full update only if the last one is older than timedelta or if the notification belongs to an open request initiated by PyCupra
+                if self.updateCallback:
+                    await self.updateCallback(1)
+        else:
+            _LOGGER.warning(f'   Don\'t know what to do with a notification of type \'{type}\')')
+
+            
+
+
+    def storeFirebaseNotifications(self, obj, notification, data_message):
+        _LOGGER.debug(f'In storeFirebaseNotifications. notification={notification}')
+        fName = self._firebaseCredentialsFileName
+        fName = fName.replace('pycupra_firebase_credentials.json', 'pycupra_firebasenotifications.txt')
+
+        with open(fName, "a") as ofile:
+            ofile.write(f'{datetime.now()}\n')
+            ofile.write(f'   notification id={notification}, data_message={data_message}\n')
+            ofile.write(f'   obj={obj}\n')
+            ofile.write("----------------------------------------------------------------\n")
+
+
+

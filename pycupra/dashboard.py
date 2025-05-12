@@ -1038,6 +1038,13 @@ def create_instruments():
             device_class="battery"
         ),
         Sensor(
+            attr="target_soc",
+            name="Target state of charge",
+            icon="mdi:battery-positive",
+            unit="%",
+            device_class="battery"
+        ),
+        Sensor(
             attr="adblue_level",
             name="Adblue level",
             icon="mdi:fuel",

@@ -46,7 +46,7 @@ from requests_oauthlib import OAuth2Session
 from oauthlib.oauth2.rfc6749.parameters import parse_authorization_code_response, parse_token_response, prepare_grant_uri
 
 from aiohttp import ClientSession, ClientTimeout
-from aiohttp.hdrs import METH_GET, METH_POST, METH_PUT
+from aiohttp.hdrs import METH_GET, METH_POST, METH_PUT, METH_DELETE
 
 from .const import (
     HEADERS_SESSION,
@@ -643,6 +643,8 @@ class Connection:
                     res = {'status_code': response.status}
                 elif response.status == 202 and method==METH_PUT:
                     res = response
+                elif response.status == 200 and method==METH_DELETE:
+                    res = response
                 elif response.status >= 200 or response.status <= 300:
                     # If this is a revoke token url, expect Content-Length 0 and return
                     if int(response.headers.get('Content-Length', 0)) == 0 and 'revoke' in url:
@@ -759,7 +761,7 @@ class Connection:
         # Check if user needs to update consent
         try:
             await self.set_token(self._session_auth_brand)
-            _LOGGER.debug('Achtung! getConsentInfo auskommentiert')
+            #_LOGGER.debug('Achtung! getConsentInfo auskommentiert')
             response = await self.get(eval(f"f'{API_MBB_STATUSDATA}'"))
             if response.get('profileCompleted','incomplete'):
                 if response.get('profileCompleted',False):
@@ -1182,6 +1184,8 @@ class Connection:
         """Get charger data."""
         await self.set_token(self._session_auth_brand)
         try:
+            chargingStatus = {}
+            chargingInfo = {}
             response = await self.get(eval(f"f'{API_CHARGING}/status'"))
             if response.get('battery', {}):
                 chargingStatus = response
@@ -1203,12 +1207,16 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch charging modes, HTTP status code: {response.get("status_code")}')
             else:
                 _LOGGER.info('Unhandled error while trying to fetch charging modes')"""
-            data = {'charging': {
-                'status': chargingStatus,
-                'info' :  chargingInfo,
-                #'modes' :  chargingModes,
-            }
-            }
+            if chargingStatus != {} and chargingInfo != {}:
+                data = {'charging': {
+                    'status': chargingStatus,
+                    'info' :  chargingInfo,
+                    #'modes' :  chargingModes,
+                    }
+                }
+            else:
+                _LOGGER.warning(f'getCharger() got no valid data. Returning None')
+                return None
             return data
         except Exception as error:
             _LOGGER.warning(f'Could not fetch charger, error: {error}')
@@ -1321,7 +1329,7 @@ class Connection:
                             if 'state' in k.lower():
                                 data['state'] = response.get(key).get(k)
                     else:
-                        if 'Id' in key:
+                        if 'Id' in key or 'id' in key:
                             data['id'] = str(response.get(key))
                         if 'State' in key:
                             data['state'] = response.get(key)
@@ -1362,6 +1370,55 @@ class Connection:
                     data['rate_limit_remaining'] = response.get('rate_limit_remaining', None)
                 return data
         except:
+            raise
+        return False
+
+    async def subscribe(self, vin, credentials):
+        url = f'{APP_URI}/v2/subscriptions'
+        deviceId = credentials.get('gcm',{}).get('app_id','')
+        token = credentials.get('fcm',{}).get('registration',{}).get('token','')
+
+        data = {
+            "deviceId": deviceId, 
+            "locale":"en_GB",
+            "services":{"charging":True,"climatisation":True},
+            "token": token, 
+            "userId": self._user_id, 
+            "vin":vin
+            }
+        return await self._setViaAPI(url, json=data)
+
+    async def deleteSubscription(self, credentials):
+        await self.set_token(self._session_auth_brand)
+        try:
+            id = credentials.get('subscription',{}).get('id','')
+            url = f'{APP_URI}/v1/subscriptions/{id}'
+            response = await self._request(METH_DELETE, url)
+            if response.status==200: 
+                _LOGGER.debug(f'Subscription {id} successfully deleted.')
+                return response
+            else:
+                _LOGGER.debug(f'API did not successfully delete subscription.')
+                raise SeatException(f'Invalid or no response for endpoint {url}')
+                return response
+        except aiohttp.client_exceptions.ClientResponseError as error:
+            _LOGGER.debug(f'Request failed. Id: {id}, HTTP request headers: {self._session_headers}')
+            if error.status == 401:
+                _LOGGER.error('Unauthorized')
+            elif error.status == 400:
+                _LOGGER.error(f'Bad request')
+            elif error.status == 429:
+                _LOGGER.warning('Too many requests. Further requests can only be made after the end of next trip in order to protect your vehicles battery.')
+                return 429
+            elif error.status == 500:
+                _LOGGER.error('Internal server error, server might be temporarily unavailable')
+            elif error.status == 502:
+                _LOGGER.error('Bad gateway, this function may not be implemented for this vehicle')
+            else:
+                _LOGGER.error(f'Unhandled HTTP exception: {error}')
+            #return False
+        except Exception as error:
+            _LOGGER.error(f'Error: {error}')
             raise
         return False
 

@@ -26,9 +26,10 @@ BRAND = 'cupra' # or 'seat' (Change it to 'seat' if you want to connect to the M
 
 PRINTRESPONSE = True
 INTERVAL = 5
-TOKEN_FILE_NAME_AND_PATH='./cupra_token.json'
-CREDENTIALS_FILE_NAME_AND_PATH='./cupra_credentials.json'
-ALL_ATTRIBUTES_FILE_NAME_AND_PATH='./cupra_all_attributes.txt'
+TOKEN_FILE_NAME_AND_PATH='./pycupra_token.json'
+CREDENTIALS_FILE_NAME_AND_PATH='./pycupra_credentials.json'
+FIREBASE_CREDENTIALS_FILE_NAME_AND_PATH='./pycupra_firebase_credentials.json'
+ALL_ATTRIBUTES_FILE_NAME_AND_PATH='./pycupra_all_attributes.txt'
 
 
 COMPONENTS = {
@@ -99,6 +100,7 @@ RESOURCES = [
 		"service_inspection_distance",
         "slow_charge",
 		"sunroof_closed",
+        "target_soc",
 		"trip_last_average_auxillary_consumption",
 		"trip_last_average_electric_consumption",
 		"trip_last_average_fuel_consumption",
@@ -375,7 +377,7 @@ async def main():
         print('# Logging on to seat.cloud.vwgroup.com #')
         print('########################################')
         print(f"Initiating new session to Seat Cloud with {credentials.get('username')} as username")
-        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE)
+        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False)
         print("Attempting to login to the Seat Cloud service")
         print(datetime.now())
         if await connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH, apiKey=credentials.get('apiKey',None)):
@@ -394,6 +396,13 @@ async def main():
             instruments = set()
             for vehicle in connection.vehicles:
                 txt = vehicle.vin
+                if vehicle == connection.vehicles[0]: # Firebase can only be activated for one vehicle. So we use it for the first one
+                    newStatus = await vehicle.initialiseFirebase(FIREBASE_CREDENTIALS_FILE_NAME_AND_PATH, vehicle.update)
+                    print('########################################')
+                    print('#      Initialisation of firebase      #')
+                    print(txt.center(40, '#'))
+                    print(f"New status of firebase={newStatus}")
+
                 print('')
                 print('########################################')
                 print('#         Setting up dashboard         #')
@@ -524,7 +533,7 @@ async def main():
             # Examples for using set functions:
 
             #await demo_set_charger(vehicle, action = "start")                        # action = "start" or "stop"
-            #await demo_set_charger_current(vehicle, value='reduced')                          # value = 1-255/Maximum/Reduced (PHEV: 252 for reduced and 254 for max, EV: Maximum/Reduced)
+            #await demo_set_charger_current(vehicle, value='reduced')                 # value = 1-255/Maximum/Reduced (PHEV: 252 for reduced and 254 for max, EV: Maximum/Reduced)
 
             #await demo_set_climatisation(vehicle, action = "start", temp=18.0)         # action = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
             #await demo_set_climatisation_temp(vehicle, temp = 18.0)                  # temp = integer from 16 to 30
@@ -562,9 +571,15 @@ async def main():
                 print('Export of all attributes successfully completed')
             else:
                 print('Export of all attributes failed')
-            
-            print(f"Sleeping for {INTERVAL} seconds")
-            await asyncio.sleep(INTERVAL)
+
+            if vehicle.firebaseStatus== 1: # firebase messaging activated
+                # Do an endless loop to wait and receive firebase messages    
+                i=0
+                while True:
+                    print(f"Sleeping for {6*INTERVAL} seconds")
+                    await asyncio.sleep(6*INTERVAL)
+                    i=i+1
+                    _LOGGER.debug(f'Round {i}')
 
     exit
 

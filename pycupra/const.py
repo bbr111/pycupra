@@ -181,3 +181,14 @@ REQ_STATUS = {
     'vsr': 'fs-car/bs/vsr/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/{id}/jobstatus',
     'default': 'fs-car/bs/{section}/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/requests/{id}/status'
 }
+
+FCM_PROJECT_ID='ola-apps-prod'
+FCM_APP_ID={
+    'cupra': '1:530284123617:android:9b9ba5a87c7ffd37fbeea0',
+    'seat':  '1:530284123617:android:d6187613ac3d7b08fbeea0'
+}
+FCM_API_KEY='AIzaSyCoSp1zitklb1EDj5yQumN0VNhDizJQHLk'
+FIREBASE_STATUS_NOT_INITIALISED= 0
+FIREBASE_STATUS_ACTIVATED= 1
+FIREBASE_STATUS_NOT_WANTED= -2
+FIREBASE_STATUS_ACTIVATION_FAILED= -1
