@@ -1151,10 +1151,11 @@ class Connection:
             _LOGGER.warning(f'Could not fetch departure profiles, error: {error}')
         return False
 
-    async def getClimater(self, vin, baseurl):
+    async def getClimater(self, vin, baseurl, oldClimatingData):
         """Get climatisation data."""
-        data={}
-        data['climater']={}
+        #data={}
+        #data['climater']={}
+        data = {'climater': oldClimatingData}
         await self.set_token(self._session_auth_brand)
         try:
             response = await self.get(eval(f"f'{API_CLIMATER_STATUS}'"))
@@ -1180,12 +1181,14 @@ class Connection:
             return False
         return data
 
-    async def getCharger(self, vin, baseurl):
+    async def getCharger(self, vin, baseurl, oldChargingData):
         """Get charger data."""
         await self.set_token(self._session_auth_brand)
         try:
             chargingStatus = {}
             chargingInfo = {}
+            #chargingModes = {}
+            #chargingProfiles = {}
             response = await self.get(eval(f"f'{API_CHARGING}/status'"))
             if response.get('battery', {}):
                 chargingStatus = response
@@ -1207,16 +1210,30 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch charging modes, HTTP status code: {response.get("status_code")}')
             else:
                 _LOGGER.info('Unhandled error while trying to fetch charging modes')"""
-            if chargingStatus != {} and chargingInfo != {}:
-                data = {'charging': {
-                    'status': chargingStatus,
-                    'info' :  chargingInfo,
-                    #'modes' :  chargingModes,
-                    }
-                }
+            """response = await self.get(eval(f"f'{API_CHARGING}/profiles'"))
+            if response.get('profiles', {}):
+                chargingProfiles = response
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch charging profiles, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.warning(f'getCharger() got no valid data. Returning None')
-                return None
+                _LOGGER.info('Unhandled error while trying to fetch charging profiles')"""
+            data = {'charging': oldChargingData}
+            if chargingStatus != {}:
+                data['charging']['status'] = chargingStatus
+            else:
+                _LOGGER.warning(f'getCharger() got no valid data for charging status')
+            if chargingInfo != {}:
+                data['charging']['info'] = chargingInfo
+            else:
+                _LOGGER.warning(f'getCharger() got no valid data for charging info')
+            #if chargingModes != {}:
+            #    data['charging']['modes'] = chargingModes
+            #else:
+            #    _LOGGER.warning(f'getCharger() got no valid data for charging modes')
+            #if chargingProfiles != {}:
+            #    data['charging']['profiles'] = chargingProfiles
+            #else:
+            #    _LOGGER.warning(f'getCharger() got no valid data for charging profiles')
             return data
         except Exception as error:
             _LOGGER.warning(f'Could not fetch charger, error: {error}')

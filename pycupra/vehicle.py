@@ -76,6 +76,7 @@ class Vehicle:
             'vehicleHealthWarnings': {'active': False, 'reason': 'not supported'},
             'state': {'active': False, 'reason': 'not supported'},
             'charging': {'active': False, 'reason': 'not supported', 'supportsTargetStateOfCharge': False},
+            'chargingProfiles': {'active': False, 'reason': 'not supported', "supportsTimerClimatisation": False,"supportsVehiclePositionedInProfileID": False,"supportsSingleTimer": False},
             'honkAndFlash': {'active': False, 'reason': 'not supported'},
             'parkingPosition': {'active': False, 'reason': 'not supported'},
             'departureTimers': {'active': False, 'reason': 'not supported', 'supportsSingleTimer': False},
@@ -121,6 +122,10 @@ class Vehicle:
                         data['supportsTargetStateOfCharge']=True
                     if capa['parameters'].get('supportsSingleTimer',False)==True or capa['parameters'].get('supportsSingleTimer',False)=='true':
                         data['supportsSingleTimer']=True
+                    if capa['parameters'].get('supportsVehiclePositionedInProfileID',False)==True or capa['parameters'].get('supportsVehiclePositionedInProfileID',False)=='true':
+                        data['supportsVehiclePositionedInProfileID']=True
+                    if capa['parameters'].get('supportsTimerClimatisation',False)==True or capa['parameters'].get('supportsTimerClimatisation',False)=='true':
+                        data['supportsTimerClimatisation']=True
                 self._relevantCapabilties[id].update(data)
                 
 
@@ -245,7 +250,7 @@ class Vehicle:
     async def get_climater(self):
         """Fetch climater data if function is enabled."""
         if self._relevantCapabilties.get('climatisation', {}).get('active', False):
-            data = await self._connection.getClimater(self.vin, self._apibase)
+            data = await self._connection.getClimater(self.vin, self._apibase, deepcopy(self.attrs.get('climater',{})))
             if data:
                 self._states.update(data)
                 self._last_get_climater = datetime.now(tz=None)
@@ -311,7 +316,7 @@ class Vehicle:
     async def get_charger(self):
         """Fetch charger data if function is enabled."""
         if self._relevantCapabilties.get('charging', {}).get('active', False):
-            data = await self._connection.getCharger(self.vin, self._apibase)
+            data = await self._connection.getCharger(self.vin, self._apibase, deepcopy(self.attrs.get('charging',{})))
             if data:
                 self._states.update(data)
                 self._last_get_charger = datetime.now(tz=None)
@@ -396,6 +401,33 @@ class Vehicle:
             _LOGGER.error('No charger support.')
             raise SeatInvalidRequestException('No charger support.')
 
+    async def set_charger_target_soc(self, value):
+        """Set target state of charge"""
+        if self.is_charging_supported:
+            if isinstance(value, int):
+                if 1 <= int(value) <= 100:
+                    # VW-Group API charger current request
+                    if self._relevantCapabilties.get('charging', {}).get('active', False) and self._relevantCapabilties.get('charging', {}).get('supportsTargetStateOfCharge', False):
+                        data= deepcopy(self.attrs.get('charging',{}).get('info',{}).get('settings',{}))
+                        if data=={}:
+                            _LOGGER.error(f'Can not set target soc, because currently no charging settings are present.')
+                            raise SeatInvalidRequestException(f'Set target soc not possible. Charging settings not present.')
+                        data['targetSoc'] = int(value)
+                    else: 
+                        _LOGGER.warning(f'Can not set target soc, because vehicle does not support this feature.')
+                        return False
+                else:
+                    _LOGGER.error(f'Set target soc to {value} is not supported.')
+                    raise SeatInvalidRequestException(f'Set target soc to {value} is not supported.')
+            # Mimick app and set charger max ampere to Maximum/Reduced
+            else:
+                _LOGGER.error(f'Data type passed is invalid.')
+                raise SeatInvalidRequestException(f'Invalid data type.')
+            return await self.set_charger('settings', data)
+        else:
+            _LOGGER.error('No charger support.')
+            raise SeatInvalidRequestException('No charger support.')
+
     async def set_charger(self, action, data=None):
         """Charging actions."""
         if not self._relevantCapabilties.get('charging', {}).get('active', False):
@@ -450,9 +482,11 @@ class Vehicle:
                         if not self.charging:
                             actionSuccessful = True
                     elif mode == 'settings':
+                        if data.get('targetSoc',0) ==  self.target_soc: # In case targetSoc is changed
+                            actionSuccessful = True
                         if data.get('maxChargeCurrentAc','') ==  self.charge_max_ampere: # In case 'maximum', 'reduced'
                             actionSuccessful = True
-                        if data.get('maxChargeCurrentAcInAmperes',0) ==  self.charge_max_ampere: # In case of a numerical value
+                        if data.get('maxChargeCurrentAcInAmperes',0) ==  self.charge_max_ampere: # In case of a numerical value for charge current
                             actionSuccessful = True
                     else:
                         _LOGGER.error(f'Missing code in vehicle._set_charger() for mode {mode}')
@@ -3150,7 +3184,7 @@ class Vehicle:
             self.storeFirebaseNotifications(obj, notification, data_message)
 
         if self.firebaseStatus != FIREBASE_STATUS_ACTIVATED:
-            _LOGGER.info(f'While firebase is not fully activated, received notifications are just acknoledged.')
+            _LOGGER.info(f'While firebase is not fully activated, received notifications are just acknowledged.')
             # As long as the firebase status is not set to activated, ignore the notifications
             return False 
  
@@ -3200,7 +3234,7 @@ class Vehicle:
                 await self.get_departure_profiles()
                 if self.updateCallback:
                     await self.updateCallback(2)
-        elif type in ('charging-status-changed', 'charging-started', 'charging-stopped'):
+        elif type in ('charging-status-changed', 'charging-started', 'charging-stopped', 'charging-settings-updated'):
             if self._requests.get('batterycharge', {}).get('id', None):
                 openRequest= self._requests.get('batterycharge', {}).get('id', None)
                 if openRequest == requestId:

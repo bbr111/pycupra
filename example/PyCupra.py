@@ -177,7 +177,18 @@ async def demo_set_charger_current(vehicle, value="reduced"):
     print('########################################')
     print('#       Change charging current        #')
     print('########################################')
-    success= await vehicle.set_charger_current(value)              # value = "max" or "reduced". 
+    success= await vehicle.set_charger_current(value)   
+    if success:
+        print("   Request completed successfully.")
+    else:
+        print("   Request failed.")
+    return success
+
+async def demo_set_charger_target_soc(vehicle, value=80):
+    print('########################################')
+    print('#     Change target state of charge    #')
+    print('########################################')
+    success= await vehicle.set_charger_target_soc(value)
     if success:
         print("   Request completed successfully.")
     else:
@@ -532,35 +543,36 @@ async def main():
 
             # Examples for using set functions:
 
-            #await demo_set_charger(vehicle, action = "start")                        # action = "start" or "stop"
-            #await demo_set_charger_current(vehicle, value='reduced')                 # value = 1-255/Maximum/Reduced (PHEV: 252 for reduced and 254 for max, EV: Maximum/Reduced)
+            #await demo_set_charger(vehicle, action = "start")                         # action = "start" or "stop"
+            #await demo_set_charger_current(vehicle, value='reduced')                  # value = 1-255/Maximum/Reduced (PHEV: 252 for reduced and 254 for max, EV: Maximum/Reduced)
+            #await demo_set_charger_target_soc(vehicle, value=70)                      # value = 1-100
 
-            #await demo_set_climatisation(vehicle, action = "start", temp=18.0)         # action = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
-            #await demo_set_climatisation_temp(vehicle, temp = 18.0)                  # temp = integer from 16 to 30
+            #await demo_set_climatisation(vehicle, action = "start", temp=18.0)        # action = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
+            #await demo_set_climatisation_temp(vehicle, temp = 18.0)                   # temp = integer from 16 to 30
             #await demo_set_battery_climatisation(vehicle, mode=False)                 # mode = False or True
-            #await demo_set_windowheating(vehicle, action = "stop")                   # action = "start" or "stop"
+            #await demo_set_windowheating(vehicle, action = "stop")                    # action = "start" or "stop"
 
-            #await demo_set_timer_schedule(vehicle)                                   # arguments id and schedule can be found in the demo function
-            #await demo_set_timer_active(vehicle, id=3, action="off")                 # id = 1, 2, 3, action = "on" or "off".
-            #await demo_set_charge_limit(vehicle, 30)                                 # limit = PHEV: 0/10/20/30/40/50, EV: 50/60/70/80/90/100
+            #await demo_set_timer_schedule(vehicle)                                    # arguments id and schedule can be found in the demo function
+            #await demo_set_timer_active(vehicle, id=3, action="off")                  # id = 1, 2, 3, action = "on" or "off".
+            #await demo_set_charge_limit(vehicle, 30)                                  # limit = PHEV: 0/10/20/30/40/50, EV: 50/60/70/80/90/100
             
-            #await demo_set_departure_profile_schedule(vehicle)                       # arguments id and schedule can be found in the demo function
+            #await demo_set_departure_profile_schedule(vehicle)                        # arguments id and schedule can be found in the demo function
             #await demo_set_departure_profile_active(vehicle, id=3, action="off")                 # id = 1, 2, 3, action = "on" or "off".
 
             #await demo_set_lock(vehicle,action = "lock", 
             #                    spin = credentials.get('spin',''))                    # action = "unlock" or "lock". spin = SPIN, needed for both
 
-            #await vehicle.set_pheater(mode = "heating", spin = "1234")                 # action = "heating", "ventilation" or "off". spin = SPIN, not needed for off
+            #await vehicle.set_pheater(mode = "heating", spin = "1234")                # action = "heating", "ventilation" or "off". spin = SPIN, not needed for off
 
-            #await demo_set_honkandflash(vehicle, action="flash")                     # action = "honkandflash" or "flash"
+            #await demo_set_honkandflash(vehicle, action="flash")                      # action = "honkandflash" or "flash"
 
-            #await vehicle.set_refresh()                                              # Takes no arguments, will trigger forced update
+            #await vehicle.set_refresh()                                               # Takes no arguments, will trigger forced update
 
             #print(f"Sleeping for {2*INTERVAL} seconds")
             #await asyncio.sleep(2*INTERVAL)
             #await demo_show_last_honkandflash_info(vehicle)                           # Returns the info of the last honkandflash_action
 
-            #await demo_send_destination(vehicle)                                       # arguments can be found in the demo function
+            #await demo_send_destination(vehicle)                                      # arguments can be found in the demo function
 
             print('########################################')
             print('#    Export all attributes to file    #')

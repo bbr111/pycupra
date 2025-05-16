@@ -453,6 +453,7 @@ class RequestRefresh(Switch):
         return self.vehicle.refresh_data
 
     async def turn_on(self):
+        _LOGGER.debug('User has called RequestRefresh().')
         await self.vehicle.set_refresh()
         await self.vehicle.update(updateType=1) #full update after set_refresh
         if self.callback is not None:
@@ -479,6 +480,7 @@ class RequestUpdate(Switch):
         return False #self.vehicle.update
 
     async def turn_on(self):
+        _LOGGER.debug('User has called RequestUpdate().')
         await self.vehicle.update(updateType=1) #full update after set_refresh
         if self.callback is not None:
             self.callback()
