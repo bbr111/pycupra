@@ -14,6 +14,7 @@ import jwt
 import string
 import secrets
 import xmltodict
+from copy import deepcopy
 
 from PIL import Image
 from io import BytesIO
@@ -108,12 +109,13 @@ TIMEOUT = timedelta(seconds=90)
 class Connection:
     """ Connection to Connect services """
   # Init connection class
-    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, nightlyUpdateReduction=False, **optional):
+    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, nightlyUpdateReduction=False, anonymise=True, **optional):
         """ Initialize """
         self._session = session
         self._lock = asyncio.Lock()
         self._session_fulldebug = fulldebug
         self._session_nightlyUpdateReduction = nightlyUpdateReduction
+        self._session_anonymise = anonymise
         self._session_headers = HEADERS_SESSION.get(brand).copy()
         self._session_base = BASE_SESSION
         self._session_auth_headers = HEADERS_AUTH.copy()
@@ -139,6 +141,16 @@ class Connection:
         self._sessionRequestCounter = 0
         self._sessionRequestTimestamp = datetime.now(tz= None)
         self._sessionRequestCounterHistory = {}
+        self._anonymisationDict={}
+        self.addToAnonymisationDict(self._session_auth_username, '[USERNAME_ANONYMISED]')
+        self.addToAnonymisationDict(self._session_auth_password, '[PASSWORD_ANONYMISED]')
+        self._anonymisationKeys={'firstName', 'lastName', 'dateOfBirth', 'nickname'}
+        self.addToAnonymisationKeys('name')
+        self.addToAnonymisationKeys('given_name')
+        self.addToAnonymisationKeys('email')
+        self.addToAnonymisationKeys('family_name')
+        self.addToAnonymisationKeys('birthdate')
+        self.addToAnonymisationKeys('vin')
 
 
     def _clear_cookies(self):
@@ -164,6 +176,7 @@ class Connection:
                 tokens=json.loads(tokenString)
                 self._session_tokens[brand]=tokens
                 self._user_id=tokens['user_id']
+                self.addToAnonymisationDict(self._user_id,'[USER_ID_ANONYMISED]')
                 return True
             _LOGGER.info('No token file present. readTokenFile() returns False.')
             return False
@@ -339,9 +352,10 @@ class Connection:
                         raise SeatEULAException('The terms and conditions must be accepted first at your local SEAT/Cupra site, e.g. "https://cupraofficial.se/"')
                     if 'user_id' in location: # Get the user_id which is needed for some later requests
                         self._user_id=parse_qs(urlparse(location).query).get('user_id')[0]
-                        _LOGGER.debug('Got user_id: %s' % self._user_id)
+                        self.addToAnonymisationDict(self._user_id,'[USER_ID_ANONYMISED]')
+                        #_LOGGER.debug('Got user_id: %s' % self._user_id)
                     if self._session_fulldebug:
-                        _LOGGER.debug(f'Following redirect to "{location}"')
+                        _LOGGER.debug(self.anonymise(f'Following redirect to "{location}"'))
                     response = await self._session.get(
                         url=location,
                         headers=self._session_auth_headers.get(client),
@@ -445,9 +459,9 @@ class Connection:
             _LOGGER.error('An API error was encountered during login, try again later')
             raise
         except (TypeError):
-            _LOGGER.warning(f'Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at your local SEAT/Cupra site, e.g. "https://cupraofficial.se/"')
+            _LOGGER.warning(self.anonymise(f'Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at your local SEAT/Cupra site, e.g. "https://cupraofficial.se/"'))
         except Exception as error:
-            _LOGGER.error(f'Login failed for {self._session_auth_username}, {error}')
+            _LOGGER.error(self.anonymise(f'Login failed for {self._session_auth_username}, {error}'))
             return False
         return True
 
@@ -473,7 +487,7 @@ class Connection:
         # POST email
         self._session_auth_headers[client]['Referer'] = authorizationEndpoint
         self._session_auth_headers[client]['Origin'] = authissuer
-        _LOGGER.debug(f"Start authorization for user {self._session_auth_username}")
+        _LOGGER.debug(self.anonymise(f"Start authorization for user {self._session_auth_username}"))
         req = await self._session.post(
             url = pe_url,
             headers = self._session_auth_headers.get(client),
@@ -503,7 +517,7 @@ class Connection:
                         import json
                         data = pattern.search(sc.string)
                         jsondata = json.loads(data.groups()[0])
-                        _LOGGER.debug(f'JSON: {jsondata}')
+                        _LOGGER.debug(self.anonymise(f'JSON: {jsondata}'))
                         if not jsondata.get('hmac', False):
                             raise SeatLoginFailedException('Failed to extract login hmac attribute')
                         if not jsondata.get('postAction', False):
@@ -542,6 +556,11 @@ class Connection:
 
     async def terminate(self):
         """Log out from connect services"""
+        for v in self.vehicles:
+            _LOGGER.debug(self.anonymise(f'Calling stopFirebase() for vehicle {v.vin}'))
+            newStatus = await v.stopFirebase()
+            if newStatus != 0:
+                _LOGGER.debug(self.anonymise(f'stopFirebase() not successful for vehicle {v.vin}'))
         await self.logout()
 
     async def logout(self):
@@ -607,7 +626,7 @@ class Connection:
     async def _request(self, method, url, **kwargs):
         """Perform a HTTP query"""
         if self._session_fulldebug:
-            _LOGGER.debug(f'HTTP {method} "{url}"')
+            _LOGGER.debug(self.anonymise(f'HTTP {method} "{url}"'))
         try:
             if datetime.now(tz=None).date() != self._sessionRequestTimestamp.date():
                 # A new day has begun. Store _sessionRequestCounter in history and reset timestamp and counter
@@ -661,19 +680,19 @@ class Connection:
                             res = await response.json(loads=json_loads)
                 else:
                     res = {}
-                    _LOGGER.debug(f'Not success status code [{response.status}] response: {response}')
+                    _LOGGER.debug(self.anonymise(f'Not success status code [{response.status}] response: {response}'))
                 if 'X-RateLimit-Remaining' in response.headers:
                     res['rate_limit_remaining'] = response.headers.get('X-RateLimit-Remaining', '')
             except Exception as e:
                 res = {}
-                _LOGGER.debug(f'Something went wrong [{response.status}] response: {response}, error: {e}')
+                _LOGGER.debug(self.anonymise(f'Something went wrong [{response.status}] response: {response}, error: {e}'))
                 return res
 
             if self._session_fulldebug:
                 if 'image/png'  in response.headers.get('Content-Type', ''):
-                    _LOGGER.debug(f'Request for "{url}" returned with status code [{response.status}]. Not showing response for Content-Type image/png.')
+                    _LOGGER.debug(self.anonymise(f'Request for "{url}" returned with status code [{response.status}]. Not showing response for Content-Type image/png.'))
                 else:
-                    _LOGGER.debug(f'Request for "{url}" returned with status code [{response.status}], response: {res}')
+                    _LOGGER.debug(self.anonymise(f'Request for "{url}" returned with status code [{response.status}], response: {self.anonymise(deepcopy(res))}'))
             else:
                 _LOGGER.debug(f'Request for "{url}" returned with status code [{response.status}]')
             return res
@@ -682,7 +701,7 @@ class Connection:
         """Function for POST actions with error handling."""
         try:
             response = await self.post(query, **data)
-            _LOGGER.debug(f'Data call returned: {response}')
+            _LOGGER.debug(self.anonymise(f'Data call returned: {response}'))
             return response
         except aiohttp.client_exceptions.ClientResponseError as error:
             _LOGGER.debug(f'Request failed. Data: {data}, HTTP request headers: {self._session_headers}')
@@ -712,10 +731,10 @@ class Connection:
             update_list = []
             for vehicle in self.vehicles:
                 if vehicle.vin not in update_list:
-                    _LOGGER.debug(f'Adding {vehicle.vin} for data refresh')
+                    _LOGGER.debug(self.anonymise(f'Adding {vehicle.vin} for data refresh'))
                     update_list.append(vehicle.update(updateType=1))
                 else:
-                    _LOGGER.debug(f'VIN {vehicle.vin} is already queued for data refresh')
+                    _LOGGER.debug(self.anonymise(f'VIN {vehicle.vin} is already queued for data refresh'))
 
             # Wait for all data updates to complete
             if len(update_list) == 0:
@@ -792,6 +811,7 @@ class Connection:
                 _LOGGER.debug('Found vehicle(s) associated with account.')
                 for vehicle in legacy_vehicles.get('vehicles'):
                     vin = vehicle.get('vin', '')
+                    self.addToAnonymisationDict(vin,'[VIN_ANONYMISED]')
                     response = await self.get(eval(f"f'{API_CAPABILITIES}'"))
                     #self._session_headers['Accept'] = 'application/json'
                     if response.get('capabilities', False):
@@ -815,7 +835,7 @@ class Connection:
         else:
             try:
                 for vehicle in api_vehicles:
-                    _LOGGER.debug(f'Checking vehicle {vehicle}')
+                    _LOGGER.debug(self.anonymise(f'Checking vehicle {vehicle}'))
                     vin = vehicle.get('vin', '')
                     #for service in vehicle.get('connectivities', []):
                     #    if isinstance(service, str):
@@ -838,14 +858,14 @@ class Connection:
                     # Check if object already exist
                     _LOGGER.debug(f'Check if vehicle exists')
                     if self.vehicle(vin) is not None:
-                        _LOGGER.debug(f'Vehicle with VIN number {vin} already exist.')
+                        _LOGGER.debug(self.anonymise(f'Vehicle with VIN number {vin} already exist.'))
                         car = Vehicle(self, newVehicle)
                         if not car == self.vehicle(newVehicle):
-                            _LOGGER.debug(f'Updating {newVehicle} object')
+                            _LOGGER.debug(self.anonymise(f'Updating {newVehicle} object'))
                             self._vehicles.pop(newVehicle)
                             self._vehicles.append(Vehicle(self, newVehicle))
                     else:
-                        _LOGGER.debug(f'Adding vehicle {vin}, with connectivities: {vehicle.get('connectivities')}')
+                        _LOGGER.debug(self.anonymise(f'Adding vehicle {vin}, with connectivities: {vehicle.get('connectivities')}'))
                         self._vehicles.append(Vehicle(self, newVehicle))
             except:
                 raise SeatLoginFailedException("Unable to fetch associated vehicles for account")
@@ -1790,6 +1810,28 @@ class Connection:
         byteChallenge = bytearray.fromhex(challenge);
         spinArray.extend(byteChallenge)
         return hashlib.sha512(spinArray).hexdigest()
+
+    def addToAnonymisationDict(self, keyword, replacement):
+        self._anonymisationDict[keyword] = replacement
+
+    def addToAnonymisationKeys(self, keyword):
+        self._anonymisationKeys.add(keyword)
+
+    def anonymise(self, inObj):
+        if self._session_anonymise:
+            if isinstance(inObj, str):
+                for key, value in self._anonymisationDict.items():
+                    inObj = inObj.replace(key,value)
+            elif isinstance(inObj, dict):
+                for elem in inObj:
+                    if elem in self._anonymisationKeys:
+                        inObj[elem] = '[ANONYMISED]'
+                    else:
+                        inObj[elem]= self.anonymise(inObj[elem])
+            elif isinstance(inObj, list):
+                for i in range(len(inObj)):
+                    inObj[i]= self.anonymise(inObj[i])
+        return inObj
 
 async def main():
     """Main method."""

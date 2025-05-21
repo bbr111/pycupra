@@ -384,11 +384,11 @@ async def main():
         raise
     async with ClientSession(headers={'Connection': 'keep-alive'}) as session:
         print('')
-        print('########################################')
-        print('# Logging on to seat.cloud.vwgroup.com #')
-        print('########################################')
-        print(f"Initiating new session to Seat Cloud with {credentials.get('username')} as username")
-        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False)
+        print('######################################################')
+        print('# Logging on to ola.prod.code.seat.cloud.vwgroup.com #')
+        print('######################################################')
+        print(f"Initiating new session to Cupra/Seat Cloud with {credentials.get('username')} as username")
+        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False, anonymise=True)
         print("Attempting to login to the Seat Cloud service")
         print(datetime.now())
         if await connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH, apiKey=credentials.get('apiKey',None)):
@@ -485,6 +485,7 @@ async def main():
         #print(f"Sleeping for {INTERVAL} seconds")
         #await asyncio.sleep(INTERVAL)
 
+        await connection.terminate()
         for vehicle in connection.vehicles:
             """print('')
             print(datetime.now())

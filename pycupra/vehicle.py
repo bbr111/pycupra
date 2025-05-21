@@ -34,7 +34,7 @@ _LOGGER = logging.getLogger(__name__)
 DATEZERO = datetime(1970,1,1)
 class Vehicle:
     def __init__(self, conn, data):
-        _LOGGER.debug(f'Creating Vehicle class object with data {data}')
+        _LOGGER.debug(conn.anonymise(f'Creating Vehicle class object with data {data}'))
         self._connection = conn
         self._url = data.get('vin', '')
         self._connectivities = data.get('connectivities', '')
@@ -50,6 +50,7 @@ class Vehicle:
         self._firebaseCredentialsFileName = None
         self._firebaseLastMessageId = ''
         self.firebaseStatus = FIREBASE_STATUS_NOT_INITIALISED
+        self.firebase = None
         self.updateCallback = None
 
         self._requests = {
@@ -184,7 +185,7 @@ class Vehicle:
                 if hasattr(self, '_last_full_update'):
                     _LOGGER.debug(f'last_full_update= {self._last_full_update}, fullUpdateExpired= {fullUpdateExpired}.')
                 if updateType!=1 and (hasattr(self, '_last_full_update') and self._last_full_update>fullUpdateExpired):
-                    _LOGGER.debug(f'Just performed small update for vehicle with VIN {self.vin}.')
+                    _LOGGER.debug(f'Just performed small update for vehicle with VIN {self._connection.anonymise(self.vin)}.')
                     return True
                 
                 # Data to be updated less often
@@ -206,13 +207,13 @@ class Vehicle:
                     return_exceptions=True
                 )
                 self._last_full_update = datetime.now(tz=None)
-                _LOGGER.debug(f'Performed full update for vehicle with VIN {self.vin}.')
+                _LOGGER.debug(f'Performed full update for vehicle with VIN {self._connection.anonymise(self.vin)}.')
                 _LOGGER.debug(f'So far about {self._connection._sessionRequestCounter} API calls since {self._connection._sessionRequestTimestamp}.')
             except:
                 raise SeatException("Update failed")
             return True
         else:
-            _LOGGER.info(f'Vehicle with VIN {self.vin} is deactivated.')
+            _LOGGER.info(f'Vehicle with VIN {self._connection.anonymise(self.vin)} is deactivated.')
             return False
         return True
 
@@ -290,6 +291,14 @@ class Vehicle:
         if self._relevantCapabilties.get('vehicleHealthWarnings', {}).get('active', False):
             data = await self._connection.getVehicleHealthWarnings(self.vin, self._apibase)
             if data:
+                #warningsList = data.get('warninglights',{}).get('statuses',[])
+                #for i in range(len(warningsList)):
+                #    _LOGGER.debug(f'Element {i} in warninglights: {warningsList[i]}')
+                #    if isinstance(warningsList[i], dict):
+                #        if warningsList[i].get('icon',''):
+                #               #Value of icon is very long and can lead to problems
+                #            _LOGGER.debug(f'Substituting value of icon by \'DELETED\'')
+                #            data['warninglights']['statuses'][i]['icon']='DELETED'
                 self._states.update(data)
             else:
                 _LOGGER.debug('Could not fetch vehicle health warnings')
@@ -1395,6 +1404,17 @@ class Vehicle:
         #            return True
 
     @property
+    def brand(self):
+        """Return brand"""
+        return self._specification.get('factoryModel', False).get('vehicleBrand', 'Unknown')
+
+    @property
+    def is_brand_supported(self):
+        """Return true if brand is supported."""
+        if self._specification.get('factoryModel', False).get('vehicleBrand', False):
+            return True
+
+    @property
     def model(self):
         """Return model"""
         if self._specification.get('carBody', False):
@@ -2217,7 +2237,12 @@ class Vehicle:
     def warnings(self):
         """Return warnings."""
         if self.attrs.get('warninglights', {}).get('statuses',[]):
-            return self.attrs.get('warninglights', {}).get('statuses',[])
+            warningTextList = []
+            for elem in self.attrs['warninglights']['statuses']:
+                if isinstance(elem, dict):
+                    if elem.get('text',''):
+                        warningTextList.append(elem.get('text',''))
+            return warningTextList
         return 'No warnings'
 
     @property
@@ -3120,6 +3145,27 @@ class Vehicle:
         )
 
 
+    async def stopFirebase(self):
+        # Check if firebase is activated
+        if self.firebaseStatus!= FIREBASE_STATUS_ACTIVATED:
+            _LOGGER.info(f'No need to stop firebase. Firebase status={self.firebaseStatus}')
+            return self.firebaseStatus
+        
+        if self.firebase == None:
+            _LOGGER.error(f'Internal error: Firebase status={self.firebaseStatus} but firebase variable not set. Setting firebase status back to not initialised.')
+            self.firebaseStatus = FIREBASE_STATUS_NOT_INITIALISED
+            return self.firebaseStatus
+
+        success = await self.firebase.firebaseStop()
+        if not success:
+            _LOGGER.warning('Stopping of firebase messaging failed.')
+            return self.firebaseStatus
+        
+        #await asyncio.sleep(5) # Wait to ignore the first notifications 
+        self.firebaseStatus = FIREBASE_STATUS_NOT_INITIALISED
+        _LOGGER.info('Stopping of firebase messaging was successful.')
+        return self.firebaseStatus
+
     async def initialiseFirebase(self, firebaseCredentialsFileName=None, updateCallback=None):
         # Check if firebase shall be used
         if firebaseCredentialsFileName == None:
@@ -3141,12 +3187,13 @@ class Vehicle:
         subscribedBrand = credentials.get('subscription',{}).get('brand','')
         if subscribedVin != '' and subscribedUserId != '':
             if subscribedVin != self.vin or subscribedUserId != self._connection._user_id or subscribedBrand != self._connection._session_auth_brand:
-                _LOGGER.debug(f'Change of vin, userId or brand. Deleting subscription for vin={subscribedVin} and userId={subscribedUserId}.')
+                _LOGGER.debug(self._connection.anonymise(f'Change of vin, userId or brand. Deleting subscription for vin={subscribedVin} and userId={subscribedUserId}.'))
                 result = await self._connection.deleteSubscription(credentials)
 
         # Start firebase
-        fb = Firebase()
-        success = await fb.firebaseStart(self.onNotification, firebaseCredentialsFileName, brand=self._connection._session_auth_brand)
+        if self.firebase == None:
+            self.firebase = Firebase()
+        success = await self.firebase.firebaseStart(self.onNotification, firebaseCredentialsFileName, brand=self._connection._session_auth_brand)
         if not success:
             self.firebaseStatus = FIREBASE_STATUS_ACTIVATION_FAILED
             _LOGGER.warning('Activation of firebase messaging failed.')
@@ -3167,7 +3214,7 @@ class Vehicle:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, writeFCMCredsFile, credentials, firebaseCredentialsFileName)
 
-        await asyncio.sleep(5) # Wait to let the first notifications 
+        await asyncio.sleep(5) # Wait to ignore the first notifications 
         self.firebaseStatus = FIREBASE_STATUS_ACTIVATED
         _LOGGER.info('Activation of firebase messaging was successful.')
         return self.firebaseStatus
@@ -3247,7 +3294,7 @@ class Vehicle:
                     await self.updateCallback(2)
             else:
                 _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last get_charger was at {self._last_get_charger}. So no need to update.')
-        elif type in ('climatisation-status-changed','climatisation-started', 'climatisation-stopped'):
+        elif type in ('climatisation-status-changed','climatisation-started', 'climatisation-stopped', 'climatisation-settings-updated'):
             if self._requests.get('climatisation', {}).get('id', None):
                 openRequest= self._requests.get('climatisation', {}).get('id', None)
                 if openRequest == requestId:
