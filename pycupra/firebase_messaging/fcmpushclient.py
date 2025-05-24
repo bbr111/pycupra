@@ -599,10 +599,21 @@ class FcmPushClient:  # pylint:disable=too-many-instance-attributes
             return
 
         if isinstance(msg, DataMessageStanza):
-            await self._handle_data_message(msg)
-            self.persistent_ids.append(msg.persistent_id)
+            #await self._handle_data_message(msg)
+            #self.persistent_ids.append(msg.persistent_id)
+            #if self.config.send_selective_acknowledgements:
+            #    await self._send_selective_ack(msg.persistent_id)
             if self.config.send_selective_acknowledgements:
-                await self._send_selective_ack(msg.persistent_id)
+                # As handle_data_message with the callback of onNotification can take some time, send_selective_ack is called in parallel
+                await asyncio.gather(
+                    self._handle_data_message(msg),
+                    self._send_selective_ack(msg.persistent_id),
+                    return_exceptions=True
+                )
+                self.persistent_ids.append(msg.persistent_id),
+            else:
+                await self._handle_data_message(msg)
+                self.persistent_ids.append(msg.persistent_id)
         elif isinstance(msg, HeartbeatPing):
             await self._handle_ping(msg)
         elif isinstance(msg, HeartbeatAck):

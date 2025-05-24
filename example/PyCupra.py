@@ -485,7 +485,6 @@ async def main():
         #print(f"Sleeping for {INTERVAL} seconds")
         #await asyncio.sleep(INTERVAL)
 
-        await connection.terminate()
         for vehicle in connection.vehicles:
             """print('')
             print(datetime.now())

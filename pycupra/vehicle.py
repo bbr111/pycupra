@@ -24,6 +24,7 @@ from .const import (
     FIREBASE_STATUS_NOT_INITIALISED,
     FIREBASE_STATUS_ACTIVATED,
     FIREBASE_STATUS_ACTIVATION_FAILED,
+    FIREBASE_STATUS_ACTIVATION_STOPPED,
     FIREBASE_STATUS_NOT_WANTED,
 )
 
@@ -153,6 +154,11 @@ class Vehicle:
         if not self.deactivated:
             try:
                 if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
+                    # Check, if fcmpushclient still started
+                    if not self.firebase._pushClient.is_started():
+                        _LOGGER.warning(f'firebaseStatus={self.firebaseStatus}, but state of push client is not started. Changing firebaseStatus to {FIREBASE_STATUS_ACTIVATION_STOPPED}')
+                        self.firebaseStatus = FIREBASE_STATUS_ACTIVATION_STOPPED
+
                     fullUpdateExpired = datetime.now(tz=None) - timedelta(seconds= 1700)
                     oldMileage = self.distance
                     if self._last_get_mileage < datetime.now(tz=None) - timedelta(seconds= 300):
@@ -191,6 +197,17 @@ class Vehicle:
                 # Data to be updated less often
                 if self.firebaseStatus != FIREBASE_STATUS_ACTIVATED:
                     await self.get_mileage() 
+
+                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATION_STOPPED:
+                    # Trying to activate firebase connection again
+                    await self.firebase._pushClient.start()
+                    #await asyncio.sleep(5)
+                    if self.firebase._pushClient.is_started():
+                        self.firebaseStatus = FIREBASE_STATUS_ACTIVATED
+                        _LOGGER.debug(f'Successfully restarted push client. New firebase status ={self.firebaseStatus}')
+                    else:
+                        _LOGGER.debug(f'Restart of push client failed. Firebase status ={self.firebaseStatus}')
+
 
                 await asyncio.gather(
                     #self.get_statusreport(),
@@ -2236,14 +2253,7 @@ class Vehicle:
     @property
     def warnings(self):
         """Return warnings."""
-        if self.attrs.get('warninglights', {}).get('statuses',[]):
-            warningTextList = []
-            for elem in self.attrs['warninglights']['statuses']:
-                if isinstance(elem, dict):
-                    if elem.get('text',''):
-                        warningTextList.append(elem.get('text',''))
-            return warningTextList
-        return 'No warnings'
+        return len(self.attrs.get('warninglights', {}).get('statuses',[]))
 
     @property
     def is_warnings_supported(self):
@@ -3319,8 +3329,6 @@ class Vehicle:
                     await self.updateCallback(1)
         else:
             _LOGGER.warning(f'   Don\'t know what to do with a notification of type \'{type}\')')
-
-            
 
 
     def storeFirebaseNotifications(self, obj, notification, data_message):

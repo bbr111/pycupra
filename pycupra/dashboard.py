@@ -755,6 +755,18 @@ class Warnings(Sensor):
     def assumed_state(self):
         return False
 
+    @property
+    def attributes(self):
+        attrs = {'warnings': 'No warnings'}
+        if self.vehicle.attrs.get('warninglights', {}).get('statuses',[]):
+            warningTextList = []
+            for elem in self.vehicle.attrs['warninglights']['statuses']:
+                if isinstance(elem, dict):
+                    if elem.get('text',''):
+                        warningTextList.append(elem.get('text',''))
+            attrs['warnings'] = warningTextList
+        return attrs
+
 class DepartureTimer1(Switch):
     def __init__(self):
         super().__init__(attr="departure1", name="Departure timer 1", icon="mdi:radiator")

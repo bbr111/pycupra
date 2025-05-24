@@ -151,6 +151,7 @@ class Connection:
         self.addToAnonymisationKeys('family_name')
         self.addToAnonymisationKeys('birthdate')
         self.addToAnonymisationKeys('vin')
+        self._error401 = False
 
 
     def _clear_cookies(self):
@@ -596,22 +597,31 @@ class Connection:
                 'request_info': error.request_info
             }
             if error.status == 401:
-                _LOGGER.warning('Received "Unauthorized" while fetching data.\nThis can occur if tokens expired or refresh service is unavailable.')
+                _LOGGER.warning('Received "Unauthorized" while fetching data. This can occur if tokens expired or refresh service is unavailable.')
+                if self._error401 != True:
+                    self._error401 = True
+                    rc=await self.refresh_token(self._session_auth_brand)
+                    if rc:
+                        _LOGGER.info('Successfully refreshed tokens after error 401.')
+                        self._error401 = False
+                        #return True
+                    else:
+                        _LOGGER.info('Refresh of tokens after error 401 not successful.')
             elif error.status == 400:
-                _LOGGER.error('Received "Bad Request" from server.\nThe request might be malformed or not implemented correctly for this vehicle.')
+                _LOGGER.error('Received "Bad Request" from server. The request might be malformed or not implemented correctly for this vehicle.')
             elif error.status == 412:
-                _LOGGER.debug('Received "Pre-condition failed".\nService might be temporarily unavailable.')
+                _LOGGER.debug('Received "Pre-condition failed". Service might be temporarily unavailable.')
             elif error.status == 500:
-                _LOGGER.info('Received "Internal server error".\nThe service is temporarily unavailable.')
+                _LOGGER.info('Received "Internal server error". The service is temporarily unavailable.')
             elif error.status == 502:
-                _LOGGER.info('Received "Bad gateway".\nEither the endpoint is temporarily unavailable or not supported for this vehicle.')
+                _LOGGER.info('Received "Bad gateway". Either the endpoint is temporarily unavailable or not supported for this vehicle.')
             elif 400 <= error.status <= 499:
                 _LOGGER.error('Received unhandled error indicating client-side problem.\nRestart or try again later.')
             elif 500 <= error.status <= 599:
                 _LOGGER.error('Received unhandled error indicating server-side problem.\nThe service might be temporarily unavailable.')
             else:
                 _LOGGER.error('Received unhandled error while requesting API endpoint.')
-            _LOGGER.debug(f'HTTP request information: {data}')
+            _LOGGER.debug(self.anonymise(f'HTTP request information: {data}'))
             return data
         except Exception as e:
             _LOGGER.debug(f'Got non HTTP related error: {e}')
@@ -704,7 +714,7 @@ class Connection:
             _LOGGER.debug(self.anonymise(f'Data call returned: {response}'))
             return response
         except aiohttp.client_exceptions.ClientResponseError as error:
-            _LOGGER.debug(f'Request failed. Data: {data}, HTTP request headers: {self._session_headers}')
+            _LOGGER.debug(self.anonymise(f'Request failed. Data: {data}, HTTP request headers: {self._session_headers}'))
             if error.status == 401:
                 _LOGGER.error('Unauthorized')
             elif error.status == 400:
@@ -1625,7 +1635,7 @@ class Connection:
             if expires > now:
                 return expires
             else:
-                _LOGGER.debug(f'Token expired at {expires.strftime("%Y-%m-%d %H:%M:%S")})')
+                _LOGGER.debug(f'Token expired at {expires.strftime("%Y-%m-%d %H:%M:%S")}')
                 return False
         except Exception as e:
             _LOGGER.info(f'Token validation failed, {e}')
