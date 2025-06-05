@@ -109,13 +109,14 @@ TIMEOUT = timedelta(seconds=90)
 class Connection:
     """ Connection to Connect services """
   # Init connection class
-    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, nightlyUpdateReduction=False, anonymise=True, **optional):
+    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, nightlyUpdateReduction=False, anonymise=True, tripStatisticsStartYear=None, **optional):
         """ Initialize """
         self._session = session
         self._lock = asyncio.Lock()
         self._session_fulldebug = fulldebug
         self._session_nightlyUpdateReduction = nightlyUpdateReduction
         self._session_anonymise = anonymise
+        self._session_tripStatisticsStartYear = tripStatisticsStartYear
         self._session_headers = HEADERS_SESSION.get(brand).copy()
         self._session_base = BASE_SESSION
         self._session_auth_headers = HEADERS_AUTH.copy()
@@ -636,7 +637,12 @@ class Connection:
     async def _request(self, method, url, **kwargs):
         """Perform a HTTP query"""
         if self._session_fulldebug:
-            _LOGGER.debug(self.anonymise(f'HTTP {method} "{url}"'))
+            argsString =''
+            if len(kwargs)>0:
+                argsString = 'with '
+                for k, val in kwargs.items():
+                    argsString = argsString + f"{k}=\'{val}\' " 
+            _LOGGER.debug(self.anonymise(f'HTTP {method} "{url}" {argsString}'))
         try:
             if datetime.now(tz=None).date() != self._sessionRequestTimestamp.date():
                 # A new day has begun. Store _sessionRequestCounter in history and reset timestamp and counter
@@ -701,6 +707,9 @@ class Connection:
             if self._session_fulldebug:
                 if 'image/png'  in response.headers.get('Content-Type', ''):
                     _LOGGER.debug(self.anonymise(f'Request for "{url}" returned with status code [{response.status}]. Not showing response for Content-Type image/png.'))
+                elif method==METH_PUT or method==METH_DELETE:
+                    # deepcopy() of res can produce errors, if res is the API response on PUT or DELETE
+                    _LOGGER.debug(f'Request for "{self.anonymise(url)}" returned with status code [{response.status}]. Not showing response for http {method}')
                 else:
                     _LOGGER.debug(self.anonymise(f'Request for "{url}" returned with status code [{response.status}], response: {self.anonymise(deepcopy(res))}'))
             else:
@@ -1080,6 +1089,12 @@ class Connection:
     async def getTripStatistics(self, vin, baseurl, supportsCyclicTrips):
         """Get short term and cyclic trip statistics."""
         await self.set_token(self._session_auth_brand)
+        if self._session_tripStatisticsStartYear==None:
+            # If connection was not initialised with parameter tripStatisticsStartYear, then the value of the last year is used
+            # (This keeps the statistics shorter in Home Assistant)
+            startYear = datetime.now().year - 1
+        else:
+            startYear = self._session_tripStatisticsStartYear
         try:
             data={'tripstatistics': {}}
             if supportsCyclicTrips:

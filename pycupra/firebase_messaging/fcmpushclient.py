@@ -92,10 +92,10 @@ class FcmPushClientConfig:  # pylint:disable=too-many-instance-attributes
     """Class to provide configuration to
     :class:`firebase_messaging.FcmPushClientConfig`.FcmPushClient."""
 
-    server_heartbeat_interval: int | None = 20 # original value was 10
+    server_heartbeat_interval: int | None = 30 # original value was 10
     """Time in seconds to request the server to send heartbeats"""
 
-    client_heartbeat_interval: int | None = 30 # original value was 20
+    client_heartbeat_interval: int | None = 40 # original value was 20
     """Time in seconds to send heartbeats to the server"""
 
     send_selective_acknowledgements: bool = True
@@ -218,6 +218,7 @@ class FcmPushClient:  # pylint:disable=too-many-instance-attributes
             or (self.stopping_lock and self.stopping_lock.locked())
             or not self.do_listen
         ):
+            _logger.debug(f"In _reset. reset_lock={self.reset_lock}, reset_lock.locked={self.reset_lock.locked()}, stopping_lock={self.stopping_lock}, stopping_lock.locked={self.stopping_lock.locked()}, do_listen={self.do_listen}")
             return
 
         async with self.reset_lock:  # type: ignore[union-attr]
@@ -725,7 +726,10 @@ class FcmPushClient:  # pylint:disable=too-many-instance-attributes
                     else:
                         _logger.exception("Unexpected exception during read\n")
                         if self._try_increment_error_count(ErrorType.CONNECTION):
+                            _logger.debug("Calling reset()\n")
                             await self._reset()
+                        else:
+                            _logger.debug("Not calling reset()\n")
         except Exception as ex:
             _logger.error(
                 "Unknown error: %s, shutting down FcmPushClient.\n%s",
@@ -805,3 +809,4 @@ class FcmPushClient:  # pylint:disable=too-many-instance-attributes
         dms.persistent_id = persistent_id
 
         # Not supported yet
+

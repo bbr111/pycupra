@@ -138,7 +138,7 @@ API_DEPARTURE_TIMERS = '{baseurl}/v1/vehicles/{vin}/departure-timers'           
 API_DEPARTURE_PROFILES = '{baseurl}/v1/vehicles/{vin}/departure/profiles'                             # Departure profiles
 API_POSITION = '{baseurl}/v1/vehicles/{vin}/parkingposition'                                         # Position data
 API_POS_TO_ADDRESS= 'https://maps.googleapis.com/maps/api/directions/json?origin={lat},{lon}&destination={lat},{lon}&traffic_model=best_guess&departure_time=now&language=de&key={apiKeyForGoogle}&mode=driving'
-API_TRIP = '{baseurl}/v1/vehicles/{vin}/driving-data/{dataType}?from=1970-01-01T00:00:00Z&to=2099-12-31T09:59:01Z' # Trip statistics (whole history) SHORT/LONG/CYCLIC (WEEK only with from)
+API_TRIP = '{baseurl}/v1/vehicles/{vin}/driving-data/{dataType}?from={startYear}-07-01T00:00:00Z&to=2099-12-31T09:59:01Z' # Trip statistics (whole history) SHORT/LONG/CYCLIC (WEEK only with from)
 API_MILEAGE = '{baseurl}/v1/vehicles/{vin}/mileage'                                                  # Total km etc
 API_MAINTENANCE = '{baseurl}/v1/vehicles/{vin}/maintenance'                                          # Inspection information
 API_MEASUREMENTS = '{baseurl}/v1/vehicles/{vin}/measurements/engines'                                # ???

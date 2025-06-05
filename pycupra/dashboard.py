@@ -1002,6 +1002,32 @@ class ChargingState(BinarySensor):
                 attr['mode']=mode
         return attr
 
+class AreaAlarm(BinarySensor):
+    def __init__(self):
+        super().__init__(attr="area_alarm", name="Area alarm", icon="mdi:alarm-light", device_class='safety')
+
+    @property
+    def state(self):
+        return self.vehicle.area_alarm
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        attr = {}
+        type = self.vehicle.attrs.get('areaAlarm', {}).get('type', '')
+        zones = self.vehicle.attrs.get('areaAlarm', {}).get('zones', [])
+        timestamp = self.vehicle.attrs.get('areaAlarm', {}).get('timestamp', 0)
+        if type != '':
+            attr['type']=type
+            if len(zones) > 0:
+                attr['zone']=zones[0]
+            if timestamp != 0:
+                attr['timestamp']=timestamp
+        return attr
+
 def create_instruments():
     return [
         Position(),
@@ -1030,6 +1056,7 @@ def create_instruments():
         DepartureProfile2(),
         DepartureProfile3(),
         ChargingState(),
+        AreaAlarm(),
         Sensor(
             attr="distance",
             name="Odometer",

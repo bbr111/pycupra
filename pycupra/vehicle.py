@@ -4,6 +4,7 @@
 import re
 import logging
 import asyncio
+import json
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -72,7 +73,6 @@ class Vehicle:
         self._relevantCapabilties = {
             'measurements': {'active': False, 'reason': 'not supported', },
             'climatisation': {'active': False, 'reason': 'not supported'},
-            #'parkingInformation': {'active': False, 'reason': 'not supported'},
             'tripStatistics': {'active': False, 'reason': 'not supported', 'supportsCyclicTrips': False},
             'vehicleHealthInspection': {'active': False, 'reason': 'not supported'},
             'vehicleHealthWarnings': {'active': False, 'reason': 'not supported'},
@@ -95,6 +95,7 @@ class Vehicle:
         self._last_get_charger = datetime.now(tz=None) - timedelta(seconds=600)
         self._last_get_climater = datetime.now(tz=None) - timedelta(seconds=600)
         self._last_get_mileage = datetime.now(tz=None) - timedelta(seconds=600)
+        self._last_get_position = datetime.now(tz=None) - timedelta(seconds=600)
 
 
  #### API get and set functions ####
@@ -131,8 +132,7 @@ class Vehicle:
                 self._relevantCapabilties[id].update(data)
                 
 
-        #await self.get_trip_statistic() # in full update
-        
+       
         # Get URLs for model image
         self._modelimages = await self.get_modelimageurl()
 
@@ -148,11 +148,16 @@ class Vehicle:
             hourago = datetime.now() - timedelta(hours = 2)
             if self._discovered < hourago:
                 await self.discover()
-                #_LOGGER.debug('Achtung! self.discover() auskommentiert')
 
         # Fetch all data if car is not deactivated
         if not self.deactivated:
             try:
+                if self.attrs.get('areaAlarm', {}) !={}:
+                    # Delete an area alarm if it is older than 900 seconds
+                    alarmTimestamp = self.attrs.get('areaAlarm', {}).get('timestamp', 0)
+                    if alarmTimestamp < datetime.now(tz=None) - timedelta(seconds= 900):
+                        self.attrs.pop("areaAlarm")
+
                 if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
                     # Check, if fcmpushclient still started
                     if not self.firebase._pushClient.is_started():
@@ -169,6 +174,26 @@ class Vehicle:
                             updateType = 1
                 else:
                     fullUpdateExpired = datetime.now(tz=None) - timedelta(seconds= 1100)
+
+                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATION_STOPPED:
+                    # Trying to activate firebase connection again
+                    """_LOGGER.debug(f'As firebase status={self.firebaseStatus}, fcmpushclient.start() is called.')
+                    await self.firebase._pushClient.start()
+                    #await asyncio.sleep(5)
+                    if self.firebase._pushClient.is_started():
+                        self.firebaseStatus = FIREBASE_STATUS_ACTIVATED
+                        _LOGGER.debug(f'Successfully restarted push client. New firebase status={self.firebaseStatus}')
+                    else:
+                        _LOGGER.warning(f'Restart of push client failed. Firebase status={self.firebaseStatus}')"""
+                    newStatus = await self.stopFirebase()
+                    if newStatus != FIREBASE_STATUS_NOT_INITIALISED:
+                        _LOGGER.debug(f'stopFirebase() not successful.')
+                    newStatus = await self.initialiseFirebase(self._firebaseCredentialsFileName, self.updateCallback)
+                    if newStatus == FIREBASE_STATUS_ACTIVATED:
+                        _LOGGER.debug(f'Reinitialisation of firebase successful.New firebase status={self.firebaseStatus}.')
+                    else:
+                        self.firebaseStatus = FIREBASE_STATUS_ACTIVATION_STOPPED
+                        _LOGGER.warning(f'Reinitialisation of firebase failed. New firebase status={self.firebaseStatus}.')
 
                 if self._connection._session_nightlyUpdateReduction:
                     # nightlyUpdateReduction is activated
@@ -197,16 +222,6 @@ class Vehicle:
                 # Data to be updated less often
                 if self.firebaseStatus != FIREBASE_STATUS_ACTIVATED:
                     await self.get_mileage() 
-
-                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATION_STOPPED:
-                    # Trying to activate firebase connection again
-                    await self.firebase._pushClient.start()
-                    #await asyncio.sleep(5)
-                    if self.firebase._pushClient.is_started():
-                        self.firebaseStatus = FIREBASE_STATUS_ACTIVATED
-                        _LOGGER.debug(f'Successfully restarted push client. New firebase status ={self.firebaseStatus}')
-                    else:
-                        _LOGGER.debug(f'Restart of push client failed. Firebase status ={self.firebaseStatus}')
 
 
                 await asyncio.gather(
@@ -244,6 +259,10 @@ class Vehicle:
         data = await self._connection.getBasicCarData(self.vin, self._apibase)
         if data:
             self._states.update(data)
+            return True
+        else:
+            _LOGGER.debug('Could not fetch basic car data')
+            return False
 
     async def get_mileage(self):
         """Fetch basic car data."""
@@ -251,6 +270,10 @@ class Vehicle:
         if data:
             self._states.update(data)
             self._last_get_mileage = datetime.now(tz=None)
+            return True
+        else:
+            _LOGGER.debug('Could not fetch mileage data')
+            return False
 
     async def get_preheater(self):
         """Fetch pre-heater data if function is enabled."""
@@ -272,8 +295,10 @@ class Vehicle:
             if data:
                 self._states.update(data)
                 self._last_get_climater = datetime.now(tz=None)
+                return True
             else:
                 _LOGGER.debug('Could not fetch climater data')
+                return False
         #else:
         #    self._requests.pop('climatisation', None)
 
@@ -283,8 +308,10 @@ class Vehicle:
             data = await self._connection.getTripStatistics(self.vin, self._apibase, self._relevantCapabilties['tripStatistics'].get('supportsCyclicTrips', False))
             if data:
                 self._states.update(data)
+                return True
             else:
                 _LOGGER.debug('Could not fetch trip statistics')
+                return False
 
     async def get_position(self):
         """Fetch position data if function is enabled."""
@@ -301,24 +328,21 @@ class Vehicle:
                     except:
                         pass
                 self._states.update(data)
+                self._last_get_position = datetime.now(tz=None)
+                return True
             else:
                 _LOGGER.debug('Could not fetch any positional data')
+                return False
 
     async def get_vehicleHealthWarnings(self):
         if self._relevantCapabilties.get('vehicleHealthWarnings', {}).get('active', False):
             data = await self._connection.getVehicleHealthWarnings(self.vin, self._apibase)
             if data:
-                #warningsList = data.get('warninglights',{}).get('statuses',[])
-                #for i in range(len(warningsList)):
-                #    _LOGGER.debug(f'Element {i} in warninglights: {warningsList[i]}')
-                #    if isinstance(warningsList[i], dict):
-                #        if warningsList[i].get('icon',''):
-                #               #Value of icon is very long and can lead to problems
-                #            _LOGGER.debug(f'Substituting value of icon by \'DELETED\'')
-                #            data['warninglights']['statuses'][i]['icon']='DELETED'
                 self._states.update(data)
+                return True
             else:
                 _LOGGER.debug('Could not fetch vehicle health warnings')
+                return False
 
     async def get_statusreport(self):
         """Fetch status data if function is enabled."""
@@ -327,8 +351,10 @@ class Vehicle:
             if data:
                 self._states.update(data)
                 self._last_get_statusreport = datetime.now(tz=None)
+                return True
             else:
                 _LOGGER.debug('Could not fetch status report')
+                return False
 
     async def get_maintenance(self):
         """Fetch maintenance data if function is enabled."""
@@ -336,8 +362,10 @@ class Vehicle:
             data = await self._connection.getMaintenance(self.vin, self._apibase)
             if data:
                 self._states.update(data)
+                return True
             else:
                 _LOGGER.debug('Could not fetch status report')
+                return False
 
     async def get_charger(self):
         """Fetch charger data if function is enabled."""
@@ -346,8 +374,10 @@ class Vehicle:
             if data:
                 self._states.update(data)
                 self._last_get_charger = datetime.now(tz=None)
+                return True
             else:
                 _LOGGER.debug('Could not fetch charger data')
+                return False
 
     async def get_departure_timers(self):
         """Fetch timer data if function is enabled."""
@@ -356,8 +386,10 @@ class Vehicle:
             if data:
                 self._states.update(data)
                 self._last_get_departure_timers = datetime.now(tz=None)
+                return True
             else:
                 _LOGGER.debug('Could not fetch timers')
+                return False
 
     async def get_departure_profiles(self):
         """Fetch timer data if function is enabled."""
@@ -366,8 +398,10 @@ class Vehicle:
             if data:
                 self._states.update(data)
                 self._last_get_departure_profiles = datetime.now(tz=None)
+                return True
             else:
                 _LOGGER.debug('Could not fetch timers')
+                return False
 
     #async def wait_for_request(self, section, request, retryCount=36):
         """Update status of outstanding requests."""
@@ -1000,7 +1034,7 @@ class Vehicle:
     async def set_climatisation_temp(self, temperature=20):
         """Set climatisation target temp."""
         if self.is_electric_climatisation_supported or self.is_auxiliary_climatisation_supported:
-            if 16 <= int(temperature) <= 30:
+            if 16 <= float(temperature) <= 30:
                 data = {
                     'climatisationWithoutExternalPower': self.climatisation_without_external_power, 
                     'targetTemperature':    temperature, 
@@ -1051,28 +1085,30 @@ class Vehicle:
         data = {}
         # Validate user input
         if mode.lower() not in ['electric', 'auxiliary', 'start', 'stop', 'on', 'off']:
+            _LOGGER.error(f"Invalid mode for 'set_climatisation': {mode}")
             raise SeatInvalidRequestException(f"Invalid mode for set_climatisation: {mode}")
         elif mode == 'auxiliary' and spin is None:
             raise SeatInvalidRequestException("Starting auxiliary heater requires provided S-PIN")
         if temp is not None:
-            if not isinstance(temp, float):
+            if not isinstance(temp, float) and not isinstance(temp, int):
+                _LOGGER.error(f"Invalid type for temp. type={type(temp)}")
                 raise SeatInvalidRequestException(f"Invalid type for temp")
             elif not 16 <= float(temp) <=30:
                 raise SeatInvalidRequestException(f"Invalid value for temp")
         else:
             temp = self.climatisation_target_temperature
-        if hvpower is not None:
-            if not isinstance(hvpower, bool):
-                raise SeatInvalidRequestException(f"Invalid type for hvpower")
+        #if hvpower is not None:
+        #    if not isinstance(hvpower, bool):
+        #        raise SeatInvalidRequestException(f"Invalid type for hvpower")
         if self.is_electric_climatisation_supported:
             if self._relevantCapabilties.get('climatisation', {}).get('active', False):
                 if mode in ['Start', 'start', 'Electric', 'electric', 'On', 'on']:
                     mode = 'start'
                 if mode in ['start', 'auxiliary']:
-                    if hvpower is not None:
-                        withoutHVPower = hvpower
-                    else:
-                        withoutHVPower = self.climatisation_without_external_power
+                    #if hvpower is not None:
+                    #    withoutHVPower = hvpower
+                    #else:
+                    #    withoutHVPower = self.climatisation_without_external_power
                     data = {
                             'targetTemperature': temp,
                             'targetTemperatureUnit': 'celsius',
@@ -1159,7 +1195,7 @@ class Vehicle:
             self._requests['climatisation'] = {'status': 'Exception'}
         raise SeatException('Climatisation action failed')
 
-   # Parking heater heating/ventilation (RS)
+    # Parking heater heating/ventilation (RS)
     async def set_pheater(self, mode, spin):
         """Set the mode for the parking heater."""
         if not self.is_pheater_heating_supported:
@@ -1202,7 +1238,7 @@ class Vehicle:
             self._requests['preheater'] = {'status': 'Exception'}
         raise SeatException('Pre-heater action failed')
 
-   # Lock 
+    # Lock 
     async def set_lock(self, action, spin):
         """Remote lock and unlock actions."""
         #if not self._services.get('rlu_v1', False):
@@ -1264,7 +1300,7 @@ class Vehicle:
             self._requests['lock'] = {'status': 'Exception'}
         raise SeatException('Lock action failed')
 
-   # Honk and flash (RHF)
+    # Honk and flash (RHF)
     async def set_honkandflash(self, action, lat=None, lng=None):
         """Turn on/off honk and flash."""
         if not self._relevantCapabilties.get('honkAndFlash', {}).get('active', False):
@@ -1321,7 +1357,7 @@ class Vehicle:
             self._requests['honkandflash'] = {'status': 'Exception'}
         raise SeatException('Honk and flash action failed')
 
-   # Refresh vehicle data (VSR)
+    # Refresh vehicle data (VSR)
     async def set_refresh(self):
         """Wake up vehicle and update status data."""
         if not self._relevantCapabilties.get('state', {}).get('active', False):
@@ -1357,7 +1393,7 @@ class Vehicle:
         raise SeatException('Data refresh failed')
 
  #### Vehicle class helpers ####
-  # Vehicle info
+    # Vehicle info
     @property
     def attrs(self):
         return self._states
@@ -1390,7 +1426,7 @@ class Vehicle:
 
 
  #### Information from vehicle states ####
-  # Car information
+    # Car information
     @property
     def nickname(self):
         return self._properties.get('vehicleNickname', '')
@@ -1479,7 +1515,7 @@ class Vehicle:
         if self._modelimages is not None:
             return True
 
-  # Lights
+    # Lights
     @property
     def parking_light(self):
         """Return true if parking light is on"""
@@ -1498,7 +1534,7 @@ class Vehicle:
             else:
                 return False
 
-  # Connection status
+    # Connection status
     @property
     def last_connected(self):
         """Return when vehicle was last connected to connect servers."""
@@ -1515,7 +1551,7 @@ class Vehicle:
         if 'updatedAt' in self.attrs.get('status', {}):
             return True
 
-  # Update status
+    # Update status
     @property
     def last_full_update(self):
         """Return when the last full update for the vehicle took place."""
@@ -1527,7 +1563,7 @@ class Vehicle:
         if hasattr(self,'_last_full_update'):
             return True
 
-  # Service information
+    # Service information
     @property
     def distance(self):
         """Return vehicle odometer."""
@@ -1615,7 +1651,7 @@ class Vehicle:
                         return True
         return False
 
-  # Charger related states for EV and PHEV
+    # Charger related states for EV and PHEV
     @property
     def charging(self):
         """Return battery level"""
@@ -1874,7 +1910,7 @@ class Vehicle:
         if self.attrs.get('charging', {}).get('info', {}).get('settings', {}).get('targetSoc', False):
             return True
 
-  # Vehicle location states
+    # Vehicle location states
     @property
     def position(self):
         """Return  position."""
@@ -1941,7 +1977,7 @@ class Vehicle:
         if 'parkingTimeUTC' in self.attrs.get('findCarResponse', {}):
             return True
 
-  # Vehicle fuel level and range
+    # Vehicle fuel level and range
     @property
     def primary_range(self):
         value = -1
@@ -2080,7 +2116,7 @@ class Vehicle:
                     return self.is_secondary_range_supported
         return False
 
-  # Climatisation settings
+    # Climatisation settings
     @property
     def climatisation_target_temperature(self):
         """Return the target temperature from climater."""
@@ -2154,7 +2190,7 @@ class Vehicle:
             else:
                 return False
 
-  # Climatisation, electric
+    # Climatisation, electric
     @property
     def electric_climatisation_attributes(self):
         """Return climatisation attributes."""
@@ -2262,7 +2298,7 @@ class Vehicle:
             return True
         return False
 
-  # Parking heater, "legacy" auxiliary climatisation
+    # Parking heater, "legacy" auxiliary climatisation
     @property
     def pheater_duration(self):
         return self._climate_duration
@@ -2310,7 +2346,7 @@ class Vehicle:
         if self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False):
             return True
 
-  # Windows
+    # Windows
     @property
     def windows_closed(self):
         return (self.window_closed_left_front and self.window_closed_left_back and self.window_closed_right_front and self.window_closed_right_back)
@@ -2417,7 +2453,7 @@ class Vehicle:
             #    response = self.attrs.get('status')['windows'].get('sunRoof', '')
         return True if response != '' else False
 
-  # Locks
+    # Locks
     @property
     def door_locked(self):
         # LEFT FRONT
@@ -2460,7 +2496,7 @@ class Vehicle:
                     return True
         return False
 
-  # Doors, hood and trunk
+    # Doors, hood and trunk
     @property
     def hood_closed(self):
         """Return true if hood is closed"""
@@ -2545,7 +2581,7 @@ class Vehicle:
                 response = self.attrs.get('status')['trunk'].get('open', 0)
         return True if response != 0 else False
 
-  # Departure timers
+    # Departure timers
     @property
     def departure1(self):
         """Return timer status and attributes."""
@@ -2657,7 +2693,7 @@ class Vehicle:
             return True
         return False
 
-  # Departure profiles
+    # Departure profiles
     @property
     def departure_profile1(self):
         """Return profile status and attributes."""
@@ -2730,7 +2766,7 @@ class Vehicle:
             return True
         return False
 
-  # Trip data
+    # Trip data
     @property
     def trip_last_entry(self):
         return self.attrs.get('tripstatistics', {}).get('short', [{},{}])[-1]
@@ -2955,7 +2991,26 @@ class Vehicle:
         if response and type(response.get('totalElectricConsumption', None)) in (float, int):
             return True
 
-#   Status of set data requests
+    # Area alarm
+    @property
+    def area_alarm(self):
+        """Return True, if attribute areaAlarm is not {}"""
+        alarmPresent = self.attrs.get('areaAlarm', {})
+        if alarmPresent !={}:
+            # Delete an area alarm if it is older than 900 seconds
+            alarmTimestamp = self.attrs.get('areaAlarm', {}).get('timestamp', 0)
+            if alarmTimestamp < datetime.now(tz=None) - timedelta(seconds= 900):
+                self.attrs.pop("areaAlarm")
+                alarmPresent = {}
+        return False if alarmPresent == {} else True
+
+    @property
+    def is_area_alarm_supported(self):
+        """Return True, if vehicle supports area alarm (always True at the moment)"""
+        # Always True at the moment. Have to check, if the geofence capability is a necessary condition
+        return True
+
+    #  Status of set data requests
     @property
     def refresh_action_status(self):
         """Return latest status of data refresh request."""
@@ -3060,7 +3115,7 @@ class Vehicle:
         """Data update is supported."""
         return True
 
-   # Honk and flash
+    # Honk and flash
     @property
     def request_honkandflash(self):
         """State is always False"""
@@ -3083,7 +3138,7 @@ class Vehicle:
         if self._relevantCapabilties.get('honkAndFlash', {}).get('active', False):
             return True
 
-  # Requests data
+    # Requests data
     @property
     def request_in_progress(self):
         """Request in progress is always supported."""
@@ -3138,7 +3193,7 @@ class Vehicle:
         #if self.is_request_in_progress_supported:
         #    return True if self._requests.get('remaining', False) else False
 
- #### Helper functions ####
+    #### Helper functions ####
     def __str__(self):
         return self.vin
 
@@ -3157,7 +3212,7 @@ class Vehicle:
 
     async def stopFirebase(self):
         # Check if firebase is activated
-        if self.firebaseStatus!= FIREBASE_STATUS_ACTIVATED:
+        if self.firebaseStatus not in (FIREBASE_STATUS_ACTIVATED, FIREBASE_STATUS_ACTIVATION_STOPPED):
             _LOGGER.info(f'No need to stop firebase. Firebase status={self.firebaseStatus}')
             return self.firebaseStatus
         
@@ -3171,7 +3226,7 @@ class Vehicle:
             _LOGGER.warning('Stopping of firebase messaging failed.')
             return self.firebaseStatus
         
-        #await asyncio.sleep(5) # Wait to ignore the first notifications 
+        #await asyncio.sleep(5) 
         self.firebaseStatus = FIREBASE_STATUS_NOT_INITIALISED
         _LOGGER.info('Stopping of firebase messaging was successful.')
         return self.firebaseStatus
@@ -3236,17 +3291,25 @@ class Vehicle:
         _LOGGER.debug(f'Received push notification: notification id={notification}, type={obj.get('data',{}).get('type','')}, requestId={obj.get('data',{}).get('requestId','[None]')}')
         _LOGGER.debug(f'   data_message={data_message}, payload={obj.get('data',{}).get('payload','[None]')}')
 
-        #temporary output of notifications in a file
-        if self.updateCallback == self.update:
-            self.storeFirebaseNotifications(obj, notification, data_message)
+        #temporary output of notifications in a file, will be removed in the next release
+        #if self.updateCallback == self.update:
+        #    self.storeFirebaseNotifications(obj, notification, data_message)
 
         if self.firebaseStatus != FIREBASE_STATUS_ACTIVATED:
-            _LOGGER.info(f'While firebase is not fully activated, received notifications are just acknowledged.')
-            # As long as the firebase status is not set to activated, ignore the notifications
-            return False 
+            if self.firebaseStatus != FIREBASE_STATUS_ACTIVATION_STOPPED:
+                _LOGGER.info(f'While firebase is not fully activated, received notifications are just acknowledged.')
+                # As long as the firebase status is not set to activated, ignore the notifications
+                return False 
+            else:
+                # It seems that the firebase connection still works although fcmpushclient.is_started() returned False some time ago
+                _LOGGER.info(f'Firebase status={self.firebaseStatus}, but PyCupra still receives push notifications.')
+                self.firebaseStatus = FIREBASE_STATUS_ACTIVATED
+                _LOGGER.info(f'Set firebase status back to {self.firebaseStatus}.')
+
  
         type = obj.get('data',{}).get('type','')
         requestId = obj.get('data',{}).get('requestId','')
+        payload = obj.get('data',{}).get('payload','')
         openRequest = -1
         if requestId != '':
             _LOGGER.info(f'Received notification of type \'{type}\', request id={requestId} ')
@@ -3317,6 +3380,28 @@ class Vehicle:
                     await self.updateCallback(2)
             else:
                 _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last get_climater was at {self._last_get_climater}. So no need to update.')
+        elif type in ('vehicle-area-alarm-vehicle-exits-zone-triggered', 'vehicle-area-alarm-vehicle-enters-zone-triggered'):
+            #if self._last_get_position < datetime.now(tz=None) - timedelta(seconds= 30):
+            #    # Update position data only if the last one is older than timedelta
+            #    await self.get_position()
+            #else:
+            #    _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last get_position was at {self._last_get_position}. So no need to update.')
+            if payload != '':
+                payloadDict = json.loads(payload) # Convert json string to dict
+                #_LOGGER.debug(f'payloadDict is dict: {isinstance(payloadDict, dict)}')
+                zones = payloadDict.get('description',{}).get('values',[])
+            else:
+                _LOGGER.warning(f'Missing information about areas. Payload ={payload}')
+                zones = []
+            areaAlarm = {'areaAlarm' : {
+                'type': 'vehicle-exits-zone' if type=='vehicle-area-alarm-vehicle-exits-zone-triggered' else 'vehicle-enters-zone',
+                'timestamp': datetime.now(tz=None),
+                'zones': zones
+                }
+            }
+            self._states.update(areaAlarm)
+            if self.updateCallback:
+                await self.updateCallback(2)
         elif type == 'vehicle-wakeup-succeeded':
             if self._requests.get('refresh', {}).get('id', None):
                 openRequest= self._requests.get('refresh', {}).get('id', None)
@@ -3327,20 +3412,23 @@ class Vehicle:
                 # Do full update only if the last one is older than timedelta or if the notification belongs to an open request initiated by PyCupra
                 if self.updateCallback:
                     await self.updateCallback(1)
+        elif type in ('vehicle-area-alert-added', 'vehicle-area-alert-updated'):
+            _LOGGER.info(f'   Intentionally ignoring a notification of type \'{type}\')')
         else:
             _LOGGER.warning(f'   Don\'t know what to do with a notification of type \'{type}\')')
 
 
-    def storeFirebaseNotifications(self, obj, notification, data_message):
-        _LOGGER.debug(f'In storeFirebaseNotifications. notification={notification}')
-        fName = self._firebaseCredentialsFileName
-        fName = fName.replace('pycupra_firebase_credentials.json', 'pycupra_firebasenotifications.txt')
+    #temporary output of notifications in a file, will be removed in the next release
+    #def storeFirebaseNotifications(self, obj, notification, data_message):
+    #    _LOGGER.debug(f'In storeFirebaseNotifications. notification={notification}')
+    #    fName = self._firebaseCredentialsFileName
+    #    fName = fName.replace('pycupra_firebase_credentials.json', 'pycupra_firebasenotifications.txt')
 
-        with open(fName, "a") as ofile:
-            ofile.write(f'{datetime.now()}\n')
-            ofile.write(f'   notification id={notification}, data_message={data_message}\n')
-            ofile.write(f'   obj={obj}\n')
-            ofile.write("----------------------------------------------------------------\n")
+    #    with open(fName, "a") as ofile:
+    #        ofile.write(f'{datetime.now()}\n')
+    #        ofile.write(f'   notification id={notification}, data_message={data_message}\n')
+    #        ofile.write(f'   obj={obj}\n')
+    #        ofile.write("----------------------------------------------------------------\n")
 
 
 
