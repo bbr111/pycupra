@@ -188,6 +188,8 @@ class Vehicle:
                     newStatus = await self.stopFirebase()
                     if newStatus != FIREBASE_STATUS_NOT_INITIALISED:
                         _LOGGER.debug(f'stopFirebase() not successful.')
+                        # Although stopFirebase() was not successful, the firebase status is reset to FIREBASE_STATUS_NOT_INITIALISED to allow a new initialisation
+                        self.firebaseStatus = FIREBASE_STATUS_NOT_INITIALISED
                     newStatus = await self.initialiseFirebase(self._firebaseCredentialsFileName, self.updateCallback)
                     if newStatus == FIREBASE_STATUS_ACTIVATED:
                         _LOGGER.debug(f'Reinitialisation of firebase successful.New firebase status={self.firebaseStatus}.')
@@ -1384,6 +1386,11 @@ class Vehicle:
                     'status': response.get('status', 'Unknown'),
                     'id': response.get('id', 0)
                 }
+                # if firebaseStatus is FIREBASE_STATUS_ACTIVATED, the request is assumed successful. Waiting for push notification before rereading status
+                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
+                    _LOGGER.debug('POST request for wakeup vehicle assumed successful. Waiting for push notification')
+                    return True
+                await self.update(updateType=1) #full update after set_refresh
                 return True
         except(SeatInvalidRequestException, SeatException):
             raise
@@ -3291,10 +3298,6 @@ class Vehicle:
         _LOGGER.debug(f'Received push notification: notification id={notification}, type={obj.get('data',{}).get('type','')}, requestId={obj.get('data',{}).get('requestId','[None]')}')
         _LOGGER.debug(f'   data_message={data_message}, payload={obj.get('data',{}).get('payload','[None]')}')
 
-        #temporary output of notifications in a file, will be removed in the next release
-        #if self.updateCallback == self.update:
-        #    self.storeFirebaseNotifications(obj, notification, data_message)
-
         if self.firebaseStatus != FIREBASE_STATUS_ACTIVATED:
             if self.firebaseStatus != FIREBASE_STATUS_ACTIVATION_STOPPED:
                 _LOGGER.info(f'While firebase is not fully activated, received notifications are just acknowledged.')
@@ -3402,7 +3405,7 @@ class Vehicle:
             self._states.update(areaAlarm)
             if self.updateCallback:
                 await self.updateCallback(2)
-        elif type == 'vehicle-wakeup-succeeded':
+        elif type in ('vehicle-wake-up-succeeded', 'vehicle-wakeup-succeeded'):
             if self._requests.get('refresh', {}).get('id', None):
                 openRequest= self._requests.get('refresh', {}).get('id', None)
                 if openRequest == requestId:
@@ -3416,19 +3419,4 @@ class Vehicle:
             _LOGGER.info(f'   Intentionally ignoring a notification of type \'{type}\')')
         else:
             _LOGGER.warning(f'   Don\'t know what to do with a notification of type \'{type}\')')
-
-
-    #temporary output of notifications in a file, will be removed in the next release
-    #def storeFirebaseNotifications(self, obj, notification, data_message):
-    #    _LOGGER.debug(f'In storeFirebaseNotifications. notification={notification}')
-    #    fName = self._firebaseCredentialsFileName
-    #    fName = fName.replace('pycupra_firebase_credentials.json', 'pycupra_firebasenotifications.txt')
-
-    #    with open(fName, "a") as ofile:
-    #        ofile.write(f'{datetime.now()}\n')
-    #        ofile.write(f'   notification id={notification}, data_message={data_message}\n')
-    #        ofile.write(f'   obj={obj}\n')
-    #        ofile.write("----------------------------------------------------------------\n")
-
-
 

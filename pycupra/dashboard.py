@@ -455,7 +455,7 @@ class RequestRefresh(Switch):
     async def turn_on(self):
         _LOGGER.debug('User has called RequestRefresh().')
         await self.vehicle.set_refresh()
-        await self.vehicle.update(updateType=1) #full update after set_refresh
+        #await self.vehicle.update(updateType=1) #full update after set_refresh
         if self.callback is not None:
             self.callback()
 
@@ -776,11 +776,12 @@ class DepartureTimer1(Switch):
 
     @property
     def state(self):
-        status = self.vehicle.departure1.get("enabled", "")
-        if status:
-            return True
-        else:
-            return False
+        if self.vehicle.departure1 != None:
+            status = self.vehicle.departure1.get("enabled", "")
+            if status:
+                return True
+        #else:
+        return False
 
     async def turn_on(self):
         await self.vehicle.set_timer_active(id=1, action="on")
@@ -808,11 +809,12 @@ class DepartureTimer2(Switch):
 
     @property
     def state(self):
-        status = self.vehicle.departure2.get("enabled", "")
-        if status:
-            return True
-        else:
-            return False
+        if self.vehicle.departure2 != None:
+            status = self.vehicle.departure2.get("enabled", "")
+            if status:
+                return True
+        #else:
+        return False
 
     async def turn_on(self):
         await self.vehicle.set_timer_active(id=2, action="on")
@@ -839,11 +841,12 @@ class DepartureTimer3(Switch):
 
     @property
     def state(self):
-        status = self.vehicle.departure3.get("enabled", "")
-        if status:
-            return True
-        else:
-            return False
+        if self.vehicle.departure3 != None:
+            status = self.vehicle.departure3.get("enabled", "")
+            if status:
+                return True
+        #else:
+        return False
 
     async def turn_on(self):
         await self.vehicle.set_timer_active(id=3, action="on")
@@ -1004,7 +1007,7 @@ class ChargingState(BinarySensor):
 
 class AreaAlarm(BinarySensor):
     def __init__(self):
-        super().__init__(attr="area_alarm", name="Area alarm", icon="mdi:alarm-light", device_class='safety')
+        super().__init__(attr="area_alarm", name="Area alarm", icon="mdi:alarm-light", device_class=None)
 
     @property
     def state(self):

@@ -43,7 +43,7 @@ class Firebase():
             await asyncio.sleep(5)
             return self._pushClient.is_started()
         except Exception as e:
-            _LOGGER.error('Error in firebaseStart. Error: {e}')
+            _LOGGER.error(f'Error in firebaseStart. Error: {e}')
             return False
 
     async def firebaseStop(self): 
@@ -54,7 +54,7 @@ class Firebase():
             self._pushClient = None
             return True
         except Exception as e:
-            _LOGGER.error('Error in firebaseStop. Error: {e}')
+            _LOGGER.error(f'Error in firebaseStop. Error: {e}')
             return False
 
 def readFCMCredsFile(credsFile):
@@ -70,7 +70,7 @@ def readFCMCredsFile(credsFile):
             _LOGGER.debug(f'{credsFile} not found.')
             return {}
     except Exception as e:
-        _LOGGER.warning('readFCMCredsFile() not successful. Error: {e}')
+        _LOGGER.warning(f'readFCMCredsFile() not successful. Error: {e}')
         return ''
 
 def writeFCMCredsFile(creds, firebaseCredentialsFileName):

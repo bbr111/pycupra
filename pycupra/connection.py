@@ -98,6 +98,7 @@ from .const import (
     API_DESTINATION,
 
     PUBLIC_MODEL_IMAGES_SERVER,
+    FIREBASE_STATUS_NOT_INITIALISED,
 )
 
 version_info >= (3, 0) or exit('Python 3 required')
@@ -109,14 +110,14 @@ TIMEOUT = timedelta(seconds=90)
 class Connection:
     """ Connection to Connect services """
   # Init connection class
-    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, nightlyUpdateReduction=False, anonymise=True, tripStatisticsStartYear=None, **optional):
+    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, nightlyUpdateReduction=False, anonymise=True, tripStatisticsStartDate=None, **optional):
         """ Initialize """
         self._session = session
         self._lock = asyncio.Lock()
         self._session_fulldebug = fulldebug
         self._session_nightlyUpdateReduction = nightlyUpdateReduction
         self._session_anonymise = anonymise
-        self._session_tripStatisticsStartYear = tripStatisticsStartYear
+        self._session_tripStatisticsStartDate = tripStatisticsStartDate
         self._session_headers = HEADERS_SESSION.get(brand).copy()
         self._session_base = BASE_SESSION
         self._session_auth_headers = HEADERS_AUTH.copy()
@@ -561,8 +562,10 @@ class Connection:
         for v in self.vehicles:
             _LOGGER.debug(self.anonymise(f'Calling stopFirebase() for vehicle {v.vin}'))
             newStatus = await v.stopFirebase()
-            if newStatus != 0:
+            if newStatus != FIREBASE_STATUS_NOT_INITIALISED:
                 _LOGGER.debug(self.anonymise(f'stopFirebase() not successful for vehicle {v.vin}'))
+                # Although stopFirebase() was not successful, the firebase status is reset to FIREBASE_STATUS_NOT_INITIALISED to allow a new initialisation
+                v.firebaseStatus = FIREBASE_STATUS_NOT_INITIALISED
         await self.logout()
 
     async def logout(self):
@@ -1089,12 +1092,12 @@ class Connection:
     async def getTripStatistics(self, vin, baseurl, supportsCyclicTrips):
         """Get short term and cyclic trip statistics."""
         await self.set_token(self._session_auth_brand)
-        if self._session_tripStatisticsStartYear==None:
-            # If connection was not initialised with parameter tripStatisticsStartYear, then the value of the last year is used
+        if self._session_tripStatisticsStartDate==None:
+            # If connection was not initialised with parameter tripStatisticsStartDate, then 360 day is used for the CYCLIC trips and 90 days for the SHORT trips
             # (This keeps the statistics shorter in Home Assistant)
-            startYear = datetime.now().year - 1
+            startDate = (datetime.now() - timedelta(days= 360)).strftime('%Y-%m-%d')
         else:
-            startYear = self._session_tripStatisticsStartYear
+            startDate = self._session_tripStatisticsStartDate
         try:
             data={'tripstatistics': {}}
             if supportsCyclicTrips:
@@ -1109,6 +1112,10 @@ class Connection:
             else:
                 _LOGGER.info(f'Vehicle does not support cyclic trips.')
             dataType='SHORT'
+            if self._session_tripStatisticsStartDate==None:
+                # If connection was not initialised with parameter tripStatisticsStartDate, then 360 day is used for the CYCLIC trips and 90 days for the SHORT trips
+                # (This keeps the statistics shorter in Home Assistant)
+                startDate = (datetime.now() - timedelta(days= 90)).strftime('%Y-%m-%d')
             response = await self.get(eval(f"f'{API_TRIP}'"))
             if response.get('data', []):
                 data['tripstatistics']['short']= response.get('data', [])
