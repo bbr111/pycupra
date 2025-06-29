@@ -1309,7 +1309,7 @@ class Vehicle:
             _LOGGER.info('Remote honk and flash is not supported.')
             raise SeatInvalidRequestException('Remote honk and flash is not supported.')
         if self._requests['honkandflash'].get('id', False):
-            timestamp = self._requests.get('honkandflash', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
+            timestamp = self._requests.get('honkandflash', {}).get('timestamp', datetime.now() - timedelta(minutes=2))
             expired = datetime.now() - timedelta(minutes=1)
             if expired > timestamp:
                 self._requests.get('honkandflash', {}).pop('id')
@@ -3335,6 +3335,10 @@ class Vehicle:
                 #await self.get_statusreport() # Call not needed because it's part of updateCallback(2)
                 if self.updateCallback:
                     await self.updateCallback(2)
+            else:
+                _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last update of status report was at {self._last_get_statusreport}. So no need to update.')
+                # Wait 2 seconds
+                await asyncio.sleep(2)
         elif type ==  'departure-times-updated': 
             if self._requests.get('departuretimer', {}).get('id', None):
                 openRequest= self._requests.get('departuretimer', {}).get('id', None)
@@ -3346,6 +3350,10 @@ class Vehicle:
                 await self.get_departure_timers()
                 if self.updateCallback:
                     await self.updateCallback(2)
+            else:
+                _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last update of departure timers was at {self._last_get_departure_timers}. So no need to update.')
+                # Wait 5 seconds
+                await asyncio.sleep(5)
         elif type ==  'departure-profiles-updated': # !!! Is this the right type?
             if self._requests.get('departureprofile', {}).get('id', None):
                 openRequest= self._requests.get('departureprofile', {}).get('id', None)
@@ -3357,6 +3365,10 @@ class Vehicle:
                 await self.get_departure_profiles()
                 if self.updateCallback:
                     await self.updateCallback(2)
+            else:
+                _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last update of departure profiles was at {self._last_get_departure_profiles}. So no need to update.')
+                # Wait 5 seconds
+                await asyncio.sleep(5)
         elif type in ('charging-status-changed', 'charging-started', 'charging-stopped', 'charging-settings-updated'):
             if self._requests.get('batterycharge', {}).get('id', None):
                 openRequest= self._requests.get('batterycharge', {}).get('id', None)
@@ -3370,6 +3382,8 @@ class Vehicle:
                     await self.updateCallback(2)
             else:
                 _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last get_charger was at {self._last_get_charger}. So no need to update.')
+                # Wait 5 seconds
+                await asyncio.sleep(5)
         elif type in ('climatisation-status-changed','climatisation-started', 'climatisation-stopped', 'climatisation-settings-updated'):
             if self._requests.get('climatisation', {}).get('id', None):
                 openRequest= self._requests.get('climatisation', {}).get('id', None)
@@ -3383,6 +3397,8 @@ class Vehicle:
                     await self.updateCallback(2)
             else:
                 _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last get_climater was at {self._last_get_climater}. So no need to update.')
+                # Wait 5 seconds
+                await asyncio.sleep(5)
         elif type in ('vehicle-area-alarm-vehicle-exits-zone-triggered', 'vehicle-area-alarm-vehicle-enters-zone-triggered'):
             #if self._last_get_position < datetime.now(tz=None) - timedelta(seconds= 30):
             #    # Update position data only if the last one is older than timedelta
@@ -3415,8 +3431,19 @@ class Vehicle:
                 # Do full update only if the last one is older than timedelta or if the notification belongs to an open request initiated by PyCupra
                 if self.updateCallback:
                     await self.updateCallback(1)
+            else:
+                _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last full update was at {self._last_full_update}. So no need to update.')
+                # Wait 5 seconds
+                await asyncio.sleep(2)
+        elif type == 'vehicle-honk-and-flash-started':
+            if self._requests.get('refresh', {}).get('id', None):
+                openRequest= self._requests.get('refresh', {}).get('id', None)
+                if openRequest == requestId:
+                    _LOGGER.debug(f'The notification closes an open request initiated by PyCupra.')
+                    self._requests.get('refresh', {}).pop('id')
+            # Nothing else to do
         elif type in ('vehicle-area-alert-added', 'vehicle-area-alert-updated'):
             _LOGGER.info(f'   Intentionally ignoring a notification of type \'{type}\')')
         else:
-            _LOGGER.warning(f'   Don\'t know what to do with a notification of type \'{type}\')')
+            _LOGGER.warning(f'   Don\'t know what to do with a notification of type \'{type}\'. Please open an issue.)')
 

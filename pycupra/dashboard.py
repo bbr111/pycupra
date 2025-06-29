@@ -1286,7 +1286,7 @@ def create_instruments():
         ),
         Sensor(
             attr="trip_last_cycle_average_electric_consumption",
-            name="Last cycle_average electric consumption",
+            name="Last cycle average electric consumption",
             icon="mdi:car-battery",
             unit="kWh/100km",
             device_class="energy_distance"
