@@ -839,7 +839,12 @@ class Connection:
                     if response.get('capabilities', False):
                         vehicle["capabilities"]=response.get('capabilities')
                     else:
-                        _LOGGER.warning(f"Failed to aquire capabilities information about vehicle with VIN {vehicle}")
+                        _LOGGER.warning(f"Failed to aquire capabilities information about vehicle with VIN {vehicle}.")
+                        if vehicle.get('capabilities',None)!=None:
+                            _LOGGER.warning(f"Keeping the old capability information.")
+                        else:
+                            _LOGGER.warning(f"Initialising vehicle without capabilities.")
+                            vehicle["capabilities"]=[]
                     response = await self.get(eval(f"f'{API_CONNECTION}'"))
                     #self._session_headers['Accept'] = 'application/json'
                     if response.get('connection', False):

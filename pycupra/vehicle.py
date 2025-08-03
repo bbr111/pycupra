@@ -107,29 +107,33 @@ class Vehicle:
         #    return_exceptions=True
         #)
         # Extract information of relevant capabilities
-        for capa in self._capabilities:
-            id=capa.get('id', '')
-            if self._relevantCapabilties.get(id, False):
-                data={}
-                data['active']=capa.get('active', False)
-                if capa.get('user-enabled', False):
-                    data['reason']='user-enabled'
-                else:
-                    data['reason']=capa.get('user-enabled', False)
-                if capa.get('status', False):
-                    data['reason']=capa.get('status', '')
-                if capa.get('parameters', False):
-                    if capa['parameters'].get('supportsCyclicTrips',False)==True or capa['parameters'].get('supportsCyclicTrips',False)=='true':
-                        data['supportsCyclicTrips']=True
-                    if capa['parameters'].get('supportsTargetStateOfCharge',False)==True or capa['parameters'].get('supportsTargetStateOfCharge',False)=='true':
-                        data['supportsTargetStateOfCharge']=True
-                    if capa['parameters'].get('supportsSingleTimer',False)==True or capa['parameters'].get('supportsSingleTimer',False)=='true':
-                        data['supportsSingleTimer']=True
-                    if capa['parameters'].get('supportsVehiclePositionedInProfileID',False)==True or capa['parameters'].get('supportsVehiclePositionedInProfileID',False)=='true':
-                        data['supportsVehiclePositionedInProfileID']=True
-                    if capa['parameters'].get('supportsTimerClimatisation',False)==True or capa['parameters'].get('supportsTimerClimatisation',False)=='true':
-                        data['supportsTimerClimatisation']=True
-                self._relevantCapabilties[id].update(data)
+        if self._capabilities != None:
+            for capa in self._capabilities:
+                id=capa.get('id', '')
+                if self._relevantCapabilties.get(id, False):
+                    data={}
+                    data['active']=capa.get('active', False)
+                    if capa.get('user-enabled', False):
+                        data['reason']='user-enabled'
+                    else:
+                        data['reason']=capa.get('user-enabled', False)
+                    if capa.get('status', False):
+                        data['reason']=capa.get('status', '')
+                    if capa.get('parameters', False):
+                        if capa['parameters'].get('supportsCyclicTrips',False)==True or capa['parameters'].get('supportsCyclicTrips',False)=='true':
+                            data['supportsCyclicTrips']=True
+                        if capa['parameters'].get('supportsTargetStateOfCharge',False)==True or capa['parameters'].get('supportsTargetStateOfCharge',False)=='true':
+                            data['supportsTargetStateOfCharge']=True
+                        if capa['parameters'].get('supportsSingleTimer',False)==True or capa['parameters'].get('supportsSingleTimer',False)=='true':
+                            data['supportsSingleTimer']=True
+                        if capa['parameters'].get('supportsVehiclePositionedInProfileID',False)==True or capa['parameters'].get('supportsVehiclePositionedInProfileID',False)=='true':
+                            data['supportsVehiclePositionedInProfileID']=True
+                        if capa['parameters'].get('supportsTimerClimatisation',False)==True or capa['parameters'].get('supportsTimerClimatisation',False)=='true':
+                            data['supportsTimerClimatisation']=True
+                    self._relevantCapabilties[id].update(data)
+        else:
+            _LOGGER.warning(f"No capabilities information stored for vehicle with VIN {self.vin}")
+
                 
 
        
