@@ -15,6 +15,7 @@ import string
 import secrets
 import xmltodict
 from copy import deepcopy
+import importlib.metadata
 
 from PIL import Image
 from io import BytesIO
@@ -26,7 +27,7 @@ from jwt.exceptions import ExpiredSignatureError
 import aiohttp
 from bs4 import BeautifulSoup
 from base64 import b64decode, b64encode, urlsafe_b64decode, urlsafe_b64encode
-from .__version__ import __version__ as lib_version
+#from .__version__ import __version__ as lib_version
 from .utilities import read_config, json_loads
 from .vehicle import Vehicle
 from .exceptions import (
@@ -102,6 +103,7 @@ from .const import (
 )
 
 version_info >= (3, 0) or exit('Python 3 required')
+lib_version = importlib.metadata.version("pycupra")
 
 _LOGGER = logging.getLogger(__name__)
 BRAND_CUPRA = 'cupra'
