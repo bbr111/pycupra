@@ -11,7 +11,7 @@ description="A library to read and send vehicle data via Cupra/Seat portal using
 readme="README.md"
 license = "Apache-2.0"
 license-files = ["LICEN[CS]E*"]
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "aiohttp",
     "beautifulsoup4",
@@ -19,5 +19,9 @@ dependencies = [
     "lxml",
     "PyJWT",
     "xmltodict",
-    "pandas"
+    "pandas",
+    "pillow",
+    "protobuf",
+    "http-ece",
+    "requests-oauthlib"
 ]

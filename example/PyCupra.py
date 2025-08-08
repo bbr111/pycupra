@@ -383,6 +383,12 @@ async def main():
     if credentials==None or credentials.get('username','')=='' or (credentials.get('password','')==''):
         _LOGGER.warning('Can not use the credentials read from the credentials file.')
         raise
+    if credentials.get('brand','')!='':
+        BRAND = credentials.get('brand','')
+        print('Read brand from the credentials file.')
+    else:
+        print('No brand found in the credentials file. Using the default value.')
+    print(f'Now working with brand={BRAND}')
     async with ClientSession(headers={'Connection': 'keep-alive'}) as session:
         print('')
         print('######################################################')
@@ -594,7 +600,7 @@ async def main():
                     i=i+1
                     _LOGGER.debug(f'Round {i}')
 
-    exit
+    sys.exit(1)
 
 if __name__ == "__main__":
     loop = asyncio.new_event_loop()
