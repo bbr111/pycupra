@@ -7,4 +7,4 @@ __pycache__/
 *.json
 *.txt
 *.log
-www/
+*.png

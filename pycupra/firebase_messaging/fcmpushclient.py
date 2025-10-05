@@ -45,8 +45,8 @@ from .mcs_pb2 import (  # pylint: disable=no-name-in-module
 
 _logger = logging.getLogger(__name__)
 
-OnNotificationCallable = Callable[[dict[str, Any], str, Any], None]
-CredentialsUpdatedCallable = Callable[[dict[str, Any]], None]
+OnNotificationCallable = Callable[[Any, str, Any], None]
+CredentialsUpdatedCallable = Callable[[dict[str, Any], str], None]
 
 # MCS Message Types and Tags
 MCS_MESSAGE_TAG = {
@@ -144,10 +144,10 @@ class FcmPushClient:  # pylint:disable=too-many-instance-attributes
 
     def __init__(
         self,
-        callback: Callable[[dict, str, Any | None], None],
+        callback: OnNotificationCallable,
         fcm_config: FcmRegisterConfig,
-        credentials: dict | None = None,
-        credentials_updated_callback: CredentialsUpdatedCallable | None = None,
+        credentials: dict,
+        credentials_updated_callback, #: CredentialsUpdatedCallable,
         *,
         callback_context: object | None = None,
         received_persistent_ids: list[str] | None = None,
@@ -451,7 +451,8 @@ class FcmPushClient:  # pylint:disable=too-many-instance-attributes
             "Decrypted data for message %s is: %s", msg.persistent_id, ret_val
         )
         try:
-            await self.callback(ret_val, msg.persistent_id, self.callback_context)
+            if True: #self.callback!= None:
+                await self.callback(ret_val, msg.persistent_id, self.callback_context)
             self._reset_error_count(ErrorType.NOTIFY)
         except Exception:
             _logger.exception("Unexpected exception calling notification callback\n")
@@ -611,7 +612,7 @@ class FcmPushClient:  # pylint:disable=too-many-instance-attributes
                     self._send_selective_ack(msg.persistent_id),
                     return_exceptions=True
                 )
-                self.persistent_ids.append(msg.persistent_id),
+                self.persistent_ids.append(msg.persistent_id)
             else:
                 await self._handle_data_message(msg)
                 self.persistent_ids.append(msg.persistent_id)

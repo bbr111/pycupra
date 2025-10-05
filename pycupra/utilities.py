@@ -12,30 +12,6 @@ import re
 _LOGGER = logging.getLogger(__name__)
 
 
-def read_config():
-    """Read config from file."""
-    for directory, filename in product(
-        [
-            dirname(argv[0]),
-            expanduser("~"),
-            env.get("XDG_CONFIG_HOME", join(expanduser("~"), ".config")),
-        ],
-        ["seat.conf", ".seat.conf"],
-    ):
-        try:
-            config = join(directory, filename)
-            _LOGGER.debug("checking for config file %s", config)
-            with open(config) as config:
-                return dict(
-                    x.split(": ")
-                    for x in config.read().strip().splitlines()
-                    if not x.startswith("#")
-                )
-        except (IOError, OSError):
-            continue
-    return {}
-
-
 def json_loads(s):
     return json.loads(s, object_hook=obj_parser)
 
@@ -86,7 +62,7 @@ def find_path(src, path):
     return find_path(src[path[0]], path[1:])
 
 
-def is_valid_path(src, path):
+def is_valid_path(src, path) -> bool:
     """
     >>> is_valid_path(dict(a=1), 'a')
     True
@@ -107,7 +83,7 @@ def is_valid_path(src, path):
         return False
 
 
-def camel2slug(s):
+def camel2slug(s) -> str:
     """Convert camelCase to camel_case.
 
     >>> camel2slug('fooBar')

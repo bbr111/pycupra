@@ -10,9 +10,11 @@ import pandas as pd
 from aiohttp import ClientSession
 from datetime import datetime
 
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(currentdir)
-sys.path.insert(0, parentdir)
+currentframe = inspect.currentframe()
+if currentframe != None:
+    currentdir = os.path.dirname(os.path.abspath(inspect.getfile(currentframe)))
+    parentdir = os.path.dirname(currentdir)
+    sys.path.insert(0, parentdir)
 
 try:
     from pycupra import Connection

@@ -26,7 +26,7 @@ class Instrument:
     def slug_attr(self):
         return camel2slug(self.attr.replace(".", "_"))
 
-    def setup(self, vehicle, **config):
+    def setup(self, vehicle, **config) -> bool:
         self.vehicle = vehicle
         if not self.is_supported:
             return False
@@ -78,7 +78,7 @@ class Sensor(Instrument):
         self.unit = unit
         self.convert = False
 
-    def configurate(self, **config):
+    def configurate(self, **config) -> None:
         if self.unit and config.get('miles', False) is True:
             if "km" == self.unit:
                 self.unit = "mi"
@@ -109,7 +109,7 @@ class Sensor(Instrument):
             self.vehicle.pheater_duration = setValue
 
     @property
-    def is_mutable(self):
+    def is_mutable(self) -> bool:
         return False
 
     @property
@@ -147,7 +147,7 @@ class BinarySensor(Instrument):
         self.reverse_state = reverse_state
 
     @property
-    def is_mutable(self):
+    def is_mutable(self) -> bool:
         return False
 
     @property
@@ -191,11 +191,11 @@ class Switch(Instrument):
         super().__init__(component="switch", attr=attr, name=name, icon=icon)
 
     @property
-    def is_mutable(self):
+    def is_mutable(self) -> bool:
         return True
 
     @property
-    def str_state(self):
+    def str_state(self) -> str:
         return "On" if self.state else "Off"
 
     def is_on(self):
@@ -208,7 +208,7 @@ class Switch(Instrument):
         pass
 
     @property
-    def assumed_state(self):
+    def assumed_state(self) -> bool:
         return True
 
 
@@ -221,13 +221,13 @@ class Climate(Instrument):
         pass
 
     @property
-    def target_temperature(self):
+    def target_temperature(self) -> None:
         pass
 
-    def set_temperature(self, **kwargs):
+    def set_temperature(self, **kwargs) -> None:
         pass
 
-    def set_hvac_mode(self, hvac_mode):
+    def set_hvac_mode(self, hvac_mode) -> None:
         pass
 
 
@@ -284,7 +284,7 @@ class Position(Instrument):
         super().__init__(component="device_tracker", attr="position", name="Position")
 
     @property
-    def is_mutable(self):
+    def is_mutable(self) -> bool:
         return False
 
     @property
@@ -298,7 +298,7 @@ class Position(Instrument):
         )
 
     @property
-    def str_state(self):
+    def str_state(self) -> tuple:
         state = super().state #or {}
         ts = state.get("timestamp", None)
         if isinstance(ts, str):
@@ -323,11 +323,11 @@ class DoorLock(Instrument):
         self.spin = config.get('spin', '')
 
     @property
-    def is_mutable(self):
+    def is_mutable(self) -> bool:
         return True
 
     @property
-    def str_state(self):
+    def str_state(self) -> str:
         return "Locked" if self.state else "Unlocked"
 
     @property
@@ -400,21 +400,21 @@ class RequestHonkAndFlash(Switch):
     def state(self):
         return self.vehicle.request_honkandflash
 
-    async def turn_on(self):
+    async def turn_on(self) -> None:
         await self.vehicle.set_honkandflash('honkandflash')
         #await self.vehicle.update()
         if self.callback is not None:
             self.callback()
 
-    async def turn_off(self):
+    async def turn_off(self) -> None:
         pass
 
     @property
-    def assumed_state(self):
+    def assumed_state(self) -> bool:
         return False
 
     @property
-    def attributes(self):
+    def attributes(self) -> dict:
         return dict(last_result = self.vehicle.honkandflash_action_status)
 
 
@@ -426,21 +426,21 @@ class RequestFlash(Switch):
     def state(self):
         return self.vehicle.request_flash
 
-    async def turn_on(self):
+    async def turn_on(self) -> None:
         await self.vehicle.set_honkandflash('flash')
         #await self.vehicle.update()
         if self.callback is not None:
             self.callback()
 
-    async def turn_off(self):
+    async def turn_off(self) -> None:
         pass
 
     @property
-    def assumed_state(self):
+    def assumed_state(self) -> bool:
         return False
 
     @property
-    def attributes(self):
+    def attributes(self) -> dict:
         return dict(last_result = self.vehicle.honkandflash_action_status)
 
 
@@ -452,22 +452,22 @@ class RequestRefresh(Switch):
     def state(self):
         return self.vehicle.refresh_data
 
-    async def turn_on(self):
+    async def turn_on(self) -> None:
         _LOGGER.debug('User has called RequestRefresh().')
         await self.vehicle.set_refresh()
         #await self.vehicle.update(updateType=1) #full update after set_refresh
         if self.callback is not None:
             self.callback()
 
-    async def turn_off(self):
+    async def turn_off(self) -> None:
         pass
 
     @property
-    def assumed_state(self):
+    def assumed_state(self) -> bool:
         return False
 
     @property
-    def attributes(self):
+    def attributes(self) -> dict:
         return dict(last_result = self.vehicle.refresh_action_status)
 
 
@@ -476,20 +476,20 @@ class RequestUpdate(Switch):
         super().__init__(attr="update_data", name="Request full update", icon="mdi:timer-refresh")
 
     @property
-    def state(self):
+    def state(self) -> bool:
         return False #self.vehicle.update
 
-    async def turn_on(self):
+    async def turn_on(self) -> None:
         _LOGGER.debug('User has called RequestUpdate().')
         await self.vehicle.update(updateType=1) #full update after set_refresh
         if self.callback is not None:
             self.callback()
 
-    async def turn_off(self):
+    async def turn_off(self) -> None:
         pass
 
     @property
-    def assumed_state(self):
+    def assumed_state(self) -> bool:
         return False
 
     #@property
@@ -514,11 +514,11 @@ class ElectricClimatisation(Switch):
         #await self.vehicle.update()
 
     @property
-    def assumed_state(self):
+    def assumed_state(self) -> bool:
         return False
 
     @property
-    def attributes(self):
+    def attributes(self) -> dict:
         attrs = {}
         if self.vehicle.is_electric_climatisation_attributes_supported:
             attrs = self.vehicle.electric_climatisation_attributes
@@ -539,20 +539,20 @@ class AuxiliaryClimatisation(Switch):
     def state(self):
         return self.vehicle.auxiliary_climatisation
 
-    async def turn_on(self):
+    async def turn_on(self) -> None:
         await self.vehicle.set_climatisation(mode = 'auxiliary', spin = self.spin)
         #await self.vehicle.update()
 
-    async def turn_off(self):
+    async def turn_off(self) -> None:
         await self.vehicle.set_climatisation(mode = 'off')
         #await self.vehicle.update()
 
     @property
-    def assumed_state(self):
+    def assumed_state(self) -> bool:
         return False
 
     @property
-    def attributes(self):
+    def attributes(self) -> dict:
         return dict(last_result = self.vehicle.climater_action_status)
 
 

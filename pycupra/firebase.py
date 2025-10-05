@@ -6,6 +6,8 @@ import string
 import secrets
 
 from .firebase_messaging import FcmPushClient, FcmRegisterConfig
+from typing import Any
+
 
 from .const import (
     FCM_PROJECT_ID,
@@ -19,14 +21,15 @@ class Firebase():
     def __init__(self):
         self._pushClient = None
 
-    async def firebaseStart(self, onNotificationFunc, firebaseCredentialsFileName, brand='cupra'): 
+    async def firebaseStart(self, onNotificationFunc, firebaseCredentialsFileName: str, brand='cupra') -> bool: 
         """ Starts the firebase cloud messaging receiver """
         try:
             loop = asyncio.get_running_loop()
             credentials = await loop.run_in_executor(None, readFCMCredsFile, firebaseCredentialsFileName)
             #credentials = readFCMCredsFile(firebaseCredentialsFileName)
-            if credentials == {}:
-                credentials =''
+
+            #if credentials == {}:
+            #    credentials =None
 
             fcm_project_id=FCM_PROJECT_ID
             fcm_app_id=FCM_APP_ID[brand]
@@ -46,7 +49,7 @@ class Firebase():
             _LOGGER.error(f'Error in firebaseStart. Error: {e}')
             return False
 
-    async def firebaseStop(self): 
+    async def firebaseStop(self) -> bool: 
         """ Stops the firebase cloud messaging receiver """
         try:
             await self._pushClient.stop()
@@ -57,7 +60,7 @@ class Firebase():
             _LOGGER.error(f'Error in firebaseStop. Error: {e}')
             return False
 
-def readFCMCredsFile(credsFile):
+def readFCMCredsFile(credsFile) -> dict[str, Any]:
     """ Reads the firebase cloud messaging credentials from file"""
     try:
         if os.path.isfile(credsFile):
@@ -71,9 +74,9 @@ def readFCMCredsFile(credsFile):
             return {}
     except Exception as e:
         _LOGGER.warning(f'readFCMCredsFile() not successful. Error: {e}')
-        return ''
+        return {}
 
-def writeFCMCredsFile(creds, firebaseCredentialsFileName):
+def writeFCMCredsFile(creds, firebaseCredentialsFileName) -> None:
     """ Saves the firebase cloud messaging credentials to a file for future use """
     try:
         with open(firebaseCredentialsFileName, "w") as f:
@@ -82,7 +85,7 @@ def writeFCMCredsFile(creds, firebaseCredentialsFileName):
     except Exception as e:
         _LOGGER.warning(f'writeFCMCredsFile() not successful. Error: {e}')
     
-async def onFCMCredentialsUpdated(creds, firebaseCredentialsFileName):
+async def onFCMCredentialsUpdated(creds: dict[str, Any], firebaseCredentialsFileName: str) -> None:
     """ Is called from firebase-messaging package """
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, writeFCMCredsFile, creds, firebaseCredentialsFileName)

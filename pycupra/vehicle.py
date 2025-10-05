@@ -5,6 +5,7 @@ import re
 import logging
 import asyncio
 import json
+from typing import Any
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -100,7 +101,7 @@ class Vehicle:
 
  #### API get and set functions ####
   # Init and update vehicle data
-    async def discover(self):
+    async def discover(self) -> None:
         """Discover vehicle and initial data."""
         #await asyncio.gather(
         #    self.get_basiccardata(),
@@ -133,9 +134,6 @@ class Vehicle:
                     self._relevantCapabilties[id].update(data)
         else:
             _LOGGER.warning(f"No capabilities information stored for vehicle with VIN {self.vin}")
-
-                
-
        
         # Get URLs for model image
         self._modelimages = await self.get_modelimageurl()
@@ -260,7 +258,7 @@ class Vehicle:
         """Fetch the URL for model image."""
         return await self._connection.getModelImageURL(self.vin, self._apibase)
 
-    async def get_basiccardata(self):
+    async def get_basiccardata(self) -> bool:
         """Fetch basic car data."""
         data = await self._connection.getBasicCarData(self.vin, self._apibase)
         if data:
@@ -270,7 +268,7 @@ class Vehicle:
             _LOGGER.debug('Could not fetch basic car data')
             return False
 
-    async def get_mileage(self):
+    async def get_mileage(self) -> bool:
         """Fetch basic car data."""
         data = await self._connection.getMileage(self.vin, self._apibase)
         if data:
@@ -281,7 +279,7 @@ class Vehicle:
             _LOGGER.debug('Could not fetch mileage data')
             return False
 
-    async def get_preheater(self):
+    async def get_preheater(self) -> None:
         """Fetch pre-heater data if function is enabled."""
         _LOGGER.info('get_preheater() not implemented yet')
         #if self._relevantCapabilties.get('#dont know the name for the preheater capability', {}).get('active', False):
@@ -294,7 +292,7 @@ class Vehicle:
         #else:
         #    self._requests.pop('preheater', None)
 
-    async def get_climater(self):
+    async def get_climater(self) -> bool:
         """Fetch climater data if function is enabled."""
         if self._relevantCapabilties.get('climatisation', {}).get('active', False):
             data = await self._connection.getClimater(self.vin, self._apibase, deepcopy(self.attrs.get('climater',{})))
@@ -304,11 +302,11 @@ class Vehicle:
                 return True
             else:
                 _LOGGER.debug('Could not fetch climater data')
-                return False
+        return False
         #else:
         #    self._requests.pop('climatisation', None)
 
-    async def get_trip_statistic(self):
+    async def get_trip_statistic(self) -> bool:
         """Fetch trip data if function is enabled."""
         if self._relevantCapabilties.get('tripStatistics', {}).get('active', False):
             data = await self._connection.getTripStatistics(self.vin, self._apibase, self._relevantCapabilties['tripStatistics'].get('supportsCyclicTrips', False))
@@ -317,9 +315,9 @@ class Vehicle:
                 return True
             else:
                 _LOGGER.debug('Could not fetch trip statistics')
-                return False
+        return False
 
-    async def get_position(self):
+    async def get_position(self) -> bool:
         """Fetch position data if function is enabled."""
         if self._relevantCapabilties.get('parkingPosition', {}).get('active', False):
             data = await self._connection.getPosition(self.vin, self._apibase)
@@ -338,9 +336,9 @@ class Vehicle:
                 return True
             else:
                 _LOGGER.debug('Could not fetch any positional data')
-                return False
+        return False
 
-    async def get_vehicleHealthWarnings(self):
+    async def get_vehicleHealthWarnings(self) -> bool:
         if self._relevantCapabilties.get('vehicleHealthWarnings', {}).get('active', False):
             data = await self._connection.getVehicleHealthWarnings(self.vin, self._apibase)
             if data:
@@ -348,9 +346,9 @@ class Vehicle:
                 return True
             else:
                 _LOGGER.debug('Could not fetch vehicle health warnings')
-                return False
+        return False
 
-    async def get_statusreport(self):
+    async def get_statusreport(self) -> bool:
         """Fetch status data if function is enabled."""
         if self._relevantCapabilties.get('state', {}).get('active', False):
             data = await self._connection.getVehicleStatusReport(self.vin, self._apibase)
@@ -360,9 +358,9 @@ class Vehicle:
                 return True
             else:
                 _LOGGER.debug('Could not fetch status report')
-                return False
+        return False
 
-    async def get_maintenance(self):
+    async def get_maintenance(self) -> bool:
         """Fetch maintenance data if function is enabled."""
         if self._relevantCapabilties.get('vehicleHealthInspection', {}).get('active', False):
             data = await self._connection.getMaintenance(self.vin, self._apibase)
@@ -371,9 +369,9 @@ class Vehicle:
                 return True
             else:
                 _LOGGER.debug('Could not fetch status report')
-                return False
+        return False
 
-    async def get_charger(self):
+    async def get_charger(self) -> bool:
         """Fetch charger data if function is enabled."""
         if self._relevantCapabilties.get('charging', {}).get('active', False):
             data = await self._connection.getCharger(self.vin, self._apibase, deepcopy(self.attrs.get('charging',{})))
@@ -383,9 +381,9 @@ class Vehicle:
                 return True
             else:
                 _LOGGER.debug('Could not fetch charger data')
-                return False
+        return False
 
-    async def get_departure_timers(self):
+    async def get_departure_timers(self) -> bool:
         """Fetch timer data if function is enabled."""
         if self._relevantCapabilties.get('departureTimers', {}).get('active', False):
             data = await self._connection.getDeparturetimer(self.vin, self._apibase)
@@ -395,9 +393,9 @@ class Vehicle:
                 return True
             else:
                 _LOGGER.debug('Could not fetch timers')
-                return False
+        return False
 
-    async def get_departure_profiles(self):
+    async def get_departure_profiles(self) -> bool:
         """Fetch timer data if function is enabled."""
         if self._relevantCapabilties.get('departureProfiles', {}).get('active', False):
             data = await self._connection.getDepartureprofiles(self.vin, self._apibase)
@@ -407,7 +405,7 @@ class Vehicle:
                 return True
             else:
                 _LOGGER.debug('Could not fetch timers')
-                return False
+        return False
 
     #async def wait_for_request(self, section, request, retryCount=36):
         """Update status of outstanding requests."""
@@ -431,9 +429,10 @@ class Vehicle:
 
   # Data set functions
    # API endpoint charging
-    async def set_charger_current(self, value):
+    async def set_charger_current(self, value) -> bool:
         """Set charger current"""
         if self.is_charging_supported:
+            data: dict[str, Any] = {}
             # Set charger max ampere to integer value
             if isinstance(value, int):
                 if 1 <= int(value) <= 255:
@@ -467,7 +466,7 @@ class Vehicle:
             _LOGGER.error('No charger support.')
             raise SeatInvalidRequestException('No charger support.')
 
-    async def set_charger_target_soc(self, value):
+    async def set_charger_target_soc(self, value) -> bool:
         """Set target state of charge"""
         if self.is_charging_supported:
             if isinstance(value, int):
@@ -494,7 +493,7 @@ class Vehicle:
             _LOGGER.error('No charger support.')
             raise SeatInvalidRequestException('No charger support.')
 
-    async def set_charger(self, action, data=None):
+    async def set_charger(self, action, data=None) -> bool:
         """Charging actions."""
         if not self._relevantCapabilties.get('charging', {}).get('active', False):
             _LOGGER.info('Remote start/stop of charger is not supported.')
@@ -572,7 +571,7 @@ class Vehicle:
             raise SeatException(f'Failed to execute set charger - {error}')
 
    # API endpoint departuretimer
-    async def set_charge_limit(self, limit=50):
+    async def set_charge_limit(self, limit=50) -> bool:
         """ Set minimum state of charge limit for departure timers or departure profiles. """
         if (not self._relevantCapabilties.get('departureTimers', {}).get('active', False) and 
             not self._relevantCapabilties.get('departureProfiles', {}).get('active', False) and 
@@ -601,10 +600,11 @@ class Vehicle:
             else:
                 raise SeatInvalidRequestException(f'Charge limit "{limit}" is not supported.')
             return await self._set_departure_profiles(data, action='minSocPercentage')
+        return False
 
-    async def set_timer_active(self, id=1, action='off'):
+    async def set_timer_active(self, id=1, action='off') -> bool:
         """ Activate/deactivate departure timers. """
-        data = {}
+        data: dict[str, Any] = {}
         supported = "is_departure" + str(id) + "_supported"
         if getattr(self, supported) is not True:
             raise SeatConfigException(f'This vehicle does not support timer id {id}.')
@@ -629,9 +629,9 @@ class Vehicle:
         else:
             raise SeatInvalidRequestException('Departure timers are not supported.')
 
-    async def set_timer_schedule(self, id, schedule={}):
+    async def set_timer_schedule(self, id, schedule={}) -> bool:
         """ Set departure timer schedule. """
-        data = {}
+        data: dict[str, Any] = {}
         # Validate required user inputs
         supported = "is_departure" + str(id) + "_supported"
         if getattr(self, supported) is not True:
@@ -758,7 +758,7 @@ class Vehicle:
             _LOGGER.info('Departure timers are not supported.')
             raise SeatInvalidRequestException('Departure timers are not supported.')
 
-    async def _set_timers(self, data=None):
+    async def _set_timers(self, data=None) -> bool:
         """ Set departure timers. """
         if not self._relevantCapabilties.get('departureTimers', {}).get('active', False):
             raise SeatInvalidRequestException('Departure timers are not supported.')
@@ -829,7 +829,7 @@ class Vehicle:
             self._requests['departuretimer'] = {'status': 'Exception'}
         raise SeatException('Failed to set departure timer schedule')
 
-    async def set_departure_profile_schedule(self, id, schedule={}):
+    async def set_departure_profile_schedule(self, id, schedule={}) -> bool:
         """ Set departure profile schedule. """
         data = {}
         # Validate required user inputs
@@ -921,7 +921,7 @@ class Vehicle:
             _LOGGER.info('Departure profiles are not supported.')
             raise SeatInvalidRequestException('Departure profiles are not supported.')
 
-    async def set_departure_profile_active(self, id=1, action='off'):
+    async def set_departure_profile_active(self, id=1, action='off') -> bool:
         """ Activate/deactivate departure profiles. """
         data = {}
         supported = "is_departure_profile" + str(id) + "_supported"
@@ -950,7 +950,7 @@ class Vehicle:
         else:
             raise SeatInvalidRequestException('Departure profiles are not supported.')
 
-    async def _set_departure_profiles(self, data=None, action=None):
+    async def _set_departure_profiles(self, data=None, action=None) -> bool:
         """ Set departure profiles. """
         if not self._relevantCapabilties.get('departureProfiles', {}).get('active', False):
             raise SeatInvalidRequestException('Departure profiles are not supported.')
@@ -1014,7 +1014,7 @@ class Vehicle:
 
 
     # Send a destination to vehicle
-    async def send_destination(self, destination=None):
+    async def send_destination(self, destination=None) -> bool:
         """ Send destination to vehicle. """
 
         if destination==None:
@@ -1037,7 +1037,7 @@ class Vehicle:
         raise SeatException('Failed to send destination to vehicle')
 
    # Climatisation electric/auxiliary/windows (CLIMATISATION)
-    async def set_climatisation_temp(self, temperature=20):
+    async def set_climatisation_temp(self, temperature=20) -> bool:
         """Set climatisation target temp."""
         if self.is_electric_climatisation_supported or self.is_auxiliary_climatisation_supported:
             if 16 <= float(temperature) <= 30:
@@ -1055,7 +1055,7 @@ class Vehicle:
             _LOGGER.error('No climatisation support.')
             raise SeatInvalidRequestException('No climatisation support.')
 
-    async def set_window_heating(self, action = 'stop'):
+    async def set_window_heating(self, action = 'stop') -> bool:
         """Turn on/off window heater."""
         if self.is_window_heater_supported:
             if action in ['start', 'stop']:
@@ -1068,7 +1068,7 @@ class Vehicle:
             _LOGGER.error('No climatisation support.')
             raise SeatInvalidRequestException('No climatisation support.')
 
-    async def set_battery_climatisation(self, mode = False):
+    async def set_battery_climatisation(self, mode = False) -> bool:
         """Turn on/off electric climatisation from battery."""
         if self.is_electric_climatisation_supported:
             if mode in [True, False]:
@@ -1086,7 +1086,7 @@ class Vehicle:
             _LOGGER.error('No climatisation support.')
             raise SeatInvalidRequestException('No climatisation support.')
 
-    async def set_climatisation(self, mode = 'off', temp = None, hvpower = None, spin = None):
+    async def set_climatisation(self, mode = 'off', temp = None, hvpower = None, spin = None) -> bool:
         """Turn on/off climatisation with electric/auxiliary heater."""
         data = {}
         # Validate user input
@@ -1128,12 +1128,12 @@ class Vehicle:
                         return await self._set_climater(mode, data, spin)
                     else:
                         _LOGGER.error('Can not stop climatisation because no running request was found')
-                        return None
+                        return False
         else:
             _LOGGER.error('No climatisation support.')
         raise SeatInvalidRequestException('No climatisation support.')
 
-    async def _set_climater(self, mode, data, spin = False):
+    async def _set_climater(self, mode, data, spin = False) -> bool:
         """Climater actions."""
         if not self._relevantCapabilties.get('climatisation', {}).get('active', False):
             _LOGGER.info('Remote control of climatisation functions is not supported.')
@@ -1202,7 +1202,7 @@ class Vehicle:
         raise SeatException('Climatisation action failed')
 
     # Parking heater heating/ventilation (RS)
-    async def set_pheater(self, mode, spin):
+    async def set_pheater(self, mode, spin) -> bool:
         """Set the mode for the parking heater."""
         if not self.is_pheater_heating_supported:
             _LOGGER.error('No parking heater support.')
@@ -1245,7 +1245,7 @@ class Vehicle:
         raise SeatException('Pre-heater action failed')
 
     # Lock 
-    async def set_lock(self, action, spin):
+    async def set_lock(self, action, spin) -> bool:
         """Remote lock and unlock actions."""
         #if not self._services.get('rlu_v1', False):
         if not self._relevantCapabilties.get('transactionHistoryLockUnlock', {}).get('active', False):
@@ -1263,8 +1263,7 @@ class Vehicle:
             raise SeatInvalidRequestException(f'Invalid lock action: {action}')
         try:
             self._requests['latest'] = 'Lock'
-            data = {}
-            response = await self._connection.setLock(self.vin, self._apibase, action, data, spin)
+            response = await self._connection.setLock(self.vin, self._apibase, action, spin)
             if not response:
                 self._requests['lock'] = {'status': 'Failed'}
                 _LOGGER.error(f'Failed to {action} vehicle')
@@ -1307,7 +1306,7 @@ class Vehicle:
         raise SeatException('Lock action failed')
 
     # Honk and flash (RHF)
-    async def set_honkandflash(self, action, lat=None, lng=None):
+    async def set_honkandflash(self, action, lat=None, lng=None) -> bool:
         """Turn on/off honk and flash."""
         if not self._relevantCapabilties.get('honkAndFlash', {}).get('active', False):
             _LOGGER.info('Remote honk and flash is not supported.')
@@ -1364,7 +1363,7 @@ class Vehicle:
         raise SeatException('Honk and flash action failed')
 
     # Refresh vehicle data (VSR)
-    async def set_refresh(self):
+    async def set_refresh(self) -> bool:
         """Wake up vehicle and update status data."""
         if not self._relevantCapabilties.get('state', {}).get('active', False):
            _LOGGER.info('Data refresh is not supported.')
@@ -1443,12 +1442,14 @@ class Vehicle:
         return self._properties.get('vehicleNickname', '')
 
     @property
-    def is_nickname_supported(self):
+    def is_nickname_supported(self) -> bool:
         if self._properties.get('vehicleNickname', False):
             return True
+        else:
+            return False
 
     @property
-    def deactivated(self):
+    def deactivated(self) -> bool:
         if 'mode' in self._connectivities:
             if self._connectivities.get('mode','')=='online':
                 return False
@@ -1458,7 +1459,7 @@ class Vehicle:
         #        return car.get('deactivated', False)
 
     @property
-    def is_deactivated_supported(self):
+    def is_deactivated_supported(self) -> bool:
         if 'mode' in self._connectivities:
             return True
         return False
@@ -1473,10 +1474,12 @@ class Vehicle:
         return self._specification.get('factoryModel', False).get('vehicleBrand', 'Unknown')
 
     @property
-    def is_brand_supported(self):
+    def is_brand_supported(self) -> bool:
         """Return true if brand is supported."""
         if self._specification.get('factoryModel', False).get('vehicleBrand', False):
             return True
+        else:
+            return False
 
     @property
     def model(self):
@@ -1487,10 +1490,12 @@ class Vehicle:
         return self._specification.get('factoryModel', False).get('vehicleModel', 'Unknown')
 
     @property
-    def is_model_supported(self):
+    def is_model_supported(self) -> bool:
         """Return true if model is supported."""
         if self._specification.get('factoryModel', False).get('vehicleModel', False):
             return True
+        else:
+            return False
 
     @property
     def model_year(self):
@@ -1498,10 +1503,12 @@ class Vehicle:
         return self._specification.get('factoryModel', False).get('modYear', 'Unknown')
 
     @property
-    def is_model_year_supported(self):
+    def is_model_year_supported(self) -> bool:
         """Return true if model year is supported."""
         if self._specification.get('factoryModel', False).get('modYear', False):
             return True
+        else:
+            return False
 
     @property
     def model_image_small(self):
@@ -1509,11 +1516,12 @@ class Vehicle:
         return self._modelimages.get('images','').get('front_cropped','')
 
     @property
-    def is_model_image_small_supported(self):
+    def is_model_image_small_supported(self) -> bool:
         """Return true if model image url is not None."""
         if self._modelimages is not None:
             if self._modelimages.get('images','').get('front_cropped','')!='':
                 return True
+        return False
 
     @property
     def model_image_large(self):
@@ -1521,14 +1529,16 @@ class Vehicle:
         return self._modelimages.get('images','').get('front', '')
 
     @property
-    def is_model_image_large_supported(self):
+    def is_model_image_large_supported(self) -> bool:
         """Return true if model image url is not None."""
         if self._modelimages is not None:
             return True
+        else:
+            return False
 
     # Lights
     @property
-    def parking_light(self):
+    def parking_light(self) -> bool:
         """Return true if parking light is on"""
         response = self.attrs.get('status').get('lights', 0)
         if response == 'on':
@@ -1537,30 +1547,34 @@ class Vehicle:
             return False
 
     @property
-    def is_parking_light_supported(self):
+    def is_parking_light_supported(self) -> bool:
         """Return true if parking light is supported"""
         if self.attrs.get('status', False):
             if 'lights' in self.attrs.get('status'):
                 return True
-            else:
-                return False
+        return False
 
     # Connection status
     @property
-    def last_connected(self):
+    def last_connected(self) -> datetime:
         """Return when vehicle was last connected to connect servers."""
         last_connected_utc = self.attrs.get('status').get('updatedAt','')
         if isinstance(last_connected_utc, datetime):
             last_connected = last_connected_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
         else:
-            last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc).astimezone(tz=None)
+            # it seems, that last_connected_utc was provided as a string. If the string contains a '.', then the timestamp was provided with milliseconds
+            if '.' in last_connected_utc: 
+                last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc).astimezone(tz=None)
+            else:
+                last_connected = datetime.strptime(last_connected_utc,'%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc).astimezone(tz=None)
         return last_connected #.strftime('%Y-%m-%d %H:%M:%S')
 
     @property
-    def is_last_connected_supported(self):
+    def is_last_connected_supported(self) -> bool:
         """Return when vehicle was last connected to connect servers."""
         if 'updatedAt' in self.attrs.get('status', {}):
             return True
+        return False
 
     # Update status
     @property
@@ -1569,20 +1583,21 @@ class Vehicle:
         return self._last_full_update.astimezone(tz=None)
 
     @property
-    def is_last_full_update_supported(self):
+    def is_last_full_update_supported(self) -> bool:
         """Return when last full update for vehicle took place."""
         if hasattr(self,'_last_full_update'):
             return True
+        return False
 
     # Service information
     @property
-    def distance(self):
+    def distance(self) -> int:
         """Return vehicle odometer."""
         value = self.attrs.get('mileage').get('mileageKm', 0)
         return int(value)
 
     @property
-    def is_distance_supported(self):
+    def is_distance_supported(self) -> bool:
         """Return true if odometer is supported"""
         if self.attrs.get('mileage', False):
             if 'mileageKm' in self.attrs.get('mileage'):
@@ -1590,42 +1605,42 @@ class Vehicle:
         return False
 
     @property
-    def service_inspection(self):
+    def service_inspection(self) -> int:
         """Return time left until service inspection"""
         value = -1
         value = int(self.attrs.get('maintenance', {}).get('inspectionDueDays', 0))
         return int(value)
 
     @property
-    def is_service_inspection_supported(self):
+    def is_service_inspection_supported(self) -> bool:
         if self.attrs.get('maintenance', False):
             if 'inspectionDueDays' in self.attrs.get('maintenance'):
                 return True
         return False
 
     @property
-    def service_inspection_distance(self):
+    def service_inspection_distance(self) -> int:
         """Return time left until service inspection"""
         value = -1
         value = int(self.attrs.get('maintenance').get('inspectionDueKm', 0))
         return int(value)
 
     @property
-    def is_service_inspection_distance_supported(self):
+    def is_service_inspection_distance_supported(self) -> bool:
         if self.attrs.get('maintenance', False):
             if 'inspectionDueKm' in self.attrs.get('maintenance'):
                 return True
         return False
 
     @property
-    def oil_inspection(self):
+    def oil_inspection(self) -> int:
         """Return time left until oil inspection"""
         value = -1
         value = int(self.attrs.get('maintenance', {}).get('oilServiceDueDays', 0))
         return int(value)
 
     @property
-    def is_oil_inspection_supported(self):
+    def is_oil_inspection_supported(self) -> bool:
         if self.attrs.get('maintenance', False):
             if 'oilServiceDueDays' in self.attrs.get('maintenance'):
                 if self.attrs.get('maintenance').get('oilServiceDueDays', None) is not None:
@@ -1633,14 +1648,14 @@ class Vehicle:
         return False
 
     @property
-    def oil_inspection_distance(self):
+    def oil_inspection_distance(self) -> int:
         """Return distance left until oil inspection"""
         value = -1
         value = int(self.attrs.get('maintenance').get('oilServiceDueKm', 0))
         return int(value)
 
     @property
-    def is_oil_inspection_distance_supported(self):
+    def is_oil_inspection_distance_supported(self) -> bool:
         if self.attrs.get('maintenance', False):
             if 'oilServiceDueKm' in self.attrs.get('maintenance'):
                 if self.attrs.get('maintenance').get('oilServiceDueKm', None) is not None:
@@ -1648,12 +1663,12 @@ class Vehicle:
         return False
 
     @property
-    def adblue_level(self):
+    def adblue_level(self) -> int:
         """Return adblue level."""
         return int(self.attrs.get('maintenance', {}).get('0x02040C0001', {}).get('value', 0))
 
     @property
-    def is_adblue_level_supported(self):
+    def is_adblue_level_supported(self) -> bool:
         """Return true if adblue level is supported."""
         if self.attrs.get('maintenance', False):
             if '0x02040C0001' in self.attrs.get('maintenance'):
@@ -1664,14 +1679,14 @@ class Vehicle:
 
     # Charger related states for EV and PHEV
     @property
-    def charging(self):
+    def charging(self) -> int:
         """Return battery level"""
         #cstate = self.attrs.get('charging').get('status').get('charging').get('state','')
         cstate = self.attrs.get('mycar',{}).get('services',{}).get('charging',{}).get('status','')
         return 1 if cstate in ['charging', 'Charging'] else 0
 
     @property
-    def is_charging_supported(self):
+    def is_charging_supported(self) -> bool:
         """Return true if charging is supported"""
         #if self.attrs.get('charging', False):
         #    if 'status' in self.attrs.get('charging', {}):
@@ -1694,14 +1709,14 @@ class Vehicle:
             return 0
 
     @property
-    def is_min_charge_level_supported(self):
+    def is_min_charge_level_supported(self) -> bool:
         """Return true if car supports setting the min charge level"""
         if self.attrs.get('departuretimers', {}).get('minSocPercentage', False):
             return True
         return False
 
     @property
-    def battery_level(self):
+    def battery_level(self) -> int:
         """Return battery level"""
         #if self.attrs.get('charging', False):
         #    return int(self.attrs.get('charging').get('status', {}).get('battery', {}).get('currentSocPercentage', 0))
@@ -1711,7 +1726,7 @@ class Vehicle:
             return 0
 
     @property
-    def is_battery_level_supported(self):
+    def is_battery_level_supported(self) -> bool:
         """Return true if battery level is supported"""
         #if self.attrs.get('charging', False):
         #    if 'status' in self.attrs.get('charging'):
@@ -1736,7 +1751,7 @@ class Vehicle:
         return 0
 
     @property
-    def is_charge_max_ampere_supported(self):
+    def is_charge_max_ampere_supported(self) -> bool:
         """Return true if Charger Max Ampere is supported"""
         if self.attrs.get('charging', False):
             if 'info' in self.attrs.get('charging', {}):
@@ -1746,14 +1761,14 @@ class Vehicle:
         return False
 
     @property
-    def slow_charge(self):
+    def slow_charge(self) -> bool:
         """Return charger max ampere setting."""
         if self.charge_max_ampere=='reduced':
             return True
         return False
 
     @property
-    def is_slow_charge_supported(self):
+    def is_slow_charge_supported(self) -> bool:
         """Return true if Slow Charge is supported"""
         if self.is_charge_max_ampere_supported:
             if self.charge_max_ampere in ('reduced', 'maximum'):
@@ -1761,7 +1776,7 @@ class Vehicle:
         return False
 
     @property
-    def charging_cable_locked(self):
+    def charging_cable_locked(self) -> bool:
         """Return plug locked state"""
         response = ''
         if self.attrs.get('charging', False):
@@ -1769,7 +1784,7 @@ class Vehicle:
         return True if response in ['Locked', 'locked'] else False
 
     @property
-    def is_charging_cable_locked_supported(self):
+    def is_charging_cable_locked_supported(self) -> bool:
         """Return true if plug locked state is supported"""
         if self.attrs.get('charging', False):
             if 'status' in self.attrs.get('charging'):
@@ -1779,7 +1794,7 @@ class Vehicle:
         return False
 
     @property
-    def charging_cable_connected(self):
+    def charging_cable_connected(self) -> bool:
         """Return plug locked state"""
         response = ''
         if self.attrs.get('charging', False):
@@ -1787,7 +1802,7 @@ class Vehicle:
         return True if response in ['Connected', 'connected'] else False
 
     @property
-    def is_charging_cable_connected_supported(self):
+    def is_charging_cable_connected_supported(self) -> bool:
         """Return true if charging cable connected is supported"""
         if self.attrs.get('charging', False):
             if 'status' in self.attrs.get('charging', {}):
@@ -1818,12 +1833,12 @@ class Vehicle:
         return 0
 
     @property
-    def is_charging_time_left_supported(self):
+    def is_charging_time_left_supported(self) -> bool:
         """Return true if charging is supported"""
         return self.is_charging_supported
 
     @property
-    def charging_power(self):
+    def charging_power(self) -> int:
         """Return charging power in watts."""
         if self.attrs.get('charging', False):
             return int(self.attrs.get('charging', {}).get('chargingPowerInWatts', 0))
@@ -1831,7 +1846,7 @@ class Vehicle:
             return 0
 
     @property
-    def is_charging_power_supported(self):
+    def is_charging_power_supported(self) -> bool:
         """Return true if charging power is supported."""
         if self.attrs.get('charging', False):
             if self.attrs.get('charging', {}).get('chargingPowerInWatts', False) is not False:
@@ -1839,7 +1854,7 @@ class Vehicle:
         return False
 
     @property
-    def charge_rate(self):
+    def charge_rate(self) -> int:
         """Return charge rate in km per h."""
         if self.attrs.get('charging', False):
             return int(self.attrs.get('charging', {}).get('chargingRateInKilometersPerHour', 0))
@@ -1847,7 +1862,7 @@ class Vehicle:
             return 0
 
     @property
-    def is_charge_rate_supported(self):
+    def is_charge_rate_supported(self) -> bool:
         """Return true if charge rate is supported."""
         if self.attrs.get('charging', False):
             if self.attrs.get('charging', {}).get('chargingRateInKilometersPerHour', False) is not False:
@@ -1865,10 +1880,12 @@ class Vehicle:
         return True if response in ['stationConnected', 'available', 'Charging', 'ready'] else False
 
     @property
-    def is_external_power_supported(self):
+    def is_external_power_supported(self) -> bool:
         """External power supported."""
         if self.attrs.get('charging', {}).get('status', {}).get('plug, {}').get('externalPower', False):
             return True
+        else:
+            return False
 
     @property
     def charging_state(self):
@@ -1881,7 +1898,7 @@ class Vehicle:
             return False
 
     @property
-    def is_charging_state_supported(self):
+    def is_charging_state_supported(self) -> bool:
         """Charging state supported."""
         #if self.attrs.get('charging', {}).get('status', {}).get('state', False):
         #    return True
@@ -1890,6 +1907,7 @@ class Vehicle:
                 if 'charging' in self.attrs.get('mycar')['services']:
                     if 'status' in self.attrs.get('mycar')['services']['charging']:
                         return True
+        return False
 
     @property
     def energy_flow(self):
@@ -1905,10 +1923,12 @@ class Vehicle:
         return False
 
     @property
-    def is_energy_flow_supported(self):
+    def is_energy_flow_supported(self) -> bool:
         """Energy flow supported."""
         if self.is_charging_state_supported:
             return True
+        else:
+            return False
 
     @property
     def target_soc(self):
@@ -1916,10 +1936,12 @@ class Vehicle:
         return self.attrs.get('charging', {}).get('info', {}).get('settings', {}).get('targetSoc', 0)
 
     @property
-    def is_target_soc_supported(self):
+    def is_target_soc_supported(self) -> bool:
         """Target state of charge supported."""
         if self.attrs.get('charging', {}).get('info', {}).get('settings', {}).get('targetSoc', False):
             return True
+        else:
+            return False
 
     # Vehicle location states
     @property
@@ -1954,26 +1976,29 @@ class Vehicle:
         return output
 
     @property
-    def is_position_supported(self):
+    def is_position_supported(self) -> bool:
         """Return true if carfinder_v1 service is active."""
         if self.attrs.get('findCarResponse', {}).get('lat', False):
             return True
         elif self.attrs.get('isMoving', False):
             return True
+        return False
 
     @property
-    def vehicle_moving(self):
+    def vehicle_moving(self) -> bool:
         """Return true if vehicle is moving."""
         return self.attrs.get('isMoving', False)
 
     @property
-    def is_vehicle_moving_supported(self):
+    def is_vehicle_moving_supported(self) -> bool:
         """Return true if vehicle supports position."""
         if self.is_position_supported:
             return True
+        else:
+            return False
 
     @property
-    def parking_time(self):
+    def parking_time(self) -> str:
         """Return timestamp of last parking time."""
         parkTime_utc = self.attrs.get('findCarResponse', {}).get('parkingTimeUTC', 'Unknown')
         if isinstance(parkTime_utc, datetime):
@@ -1983,10 +2008,12 @@ class Vehicle:
         return parkTime.strftime('%Y-%m-%d %H:%M:%S')
 
     @property
-    def is_parking_time_supported(self):
+    def is_parking_time_supported(self) -> bool:
         """Return true if vehicle parking timestamp is supported."""
         if 'parkingTimeUTC' in self.attrs.get('findCarResponse', {}):
             return True
+        else:
+            return False
 
     # Vehicle fuel level and range
     @property
@@ -1997,7 +2024,7 @@ class Vehicle:
         return int(value)
 
     @property
-    def is_primary_range_supported(self):
+    def is_primary_range_supported(self) -> bool:
         if self.attrs.get('mycar', False):
             if 'engines' in self.attrs.get('mycar', {}):
                 if 'primary' in self.attrs.get('mycar')['engines']:
@@ -2013,7 +2040,7 @@ class Vehicle:
         return value
 
     @property
-    def is_primary_drive_supported(self):
+    def is_primary_drive_supported(self) -> bool:
         if self.attrs.get('mycar', False):
             if 'engines' in self.attrs.get('mycar', {}):
                 if 'primary' in self.attrs.get('mycar')['engines']:
@@ -2029,7 +2056,7 @@ class Vehicle:
         return int(value)
  
     @property
-    def is_secondary_range_supported(self):
+    def is_secondary_range_supported(self) -> bool:
         if self.attrs.get('mycar', False):
             if 'engines' in self.attrs.get('mycar', {}):
                 if 'secondary' in self.attrs.get('mycar')['engines']:
@@ -2045,7 +2072,7 @@ class Vehicle:
         return value
  
     @property
-    def is_secondary_drive_supported(self):
+    def is_secondary_drive_supported(self) -> bool:
         if self.attrs.get('mycar', False):
             if 'engines' in self.attrs.get('mycar', {}):
                 if 'secondary' in self.attrs.get('mycar')['engines']:
@@ -2065,7 +2092,7 @@ class Vehicle:
         return -1
 
     @property
-    def is_electric_range_supported(self):
+    def is_electric_range_supported(self) -> bool:
         if self.is_secondary_drive_supported:
             if self.secondary_drive == 'electric':
                 return self.is_secondary_range_supported
@@ -2086,7 +2113,7 @@ class Vehicle:
         return -1
 
     @property
-    def is_combustion_range_supported(self):
+    def is_combustion_range_supported(self) -> bool:
         if self.is_primary_drive_supported:
             if not self.primary_drive == 'electric':
                 return self.is_primary_range_supported
@@ -2096,17 +2123,17 @@ class Vehicle:
         return False
 
     @property
-    def combined_range(self):
+    def combined_range(self) -> int:
         return int(self.combustion_range)+int(self.electric_range)
 
     @property
-    def is_combined_range_supported(self):
+    def is_combined_range_supported(self) -> bool:
         if self.is_combustion_range_supported and self.is_electric_range_supported:
             return True
         return False
 
     @property
-    def fuel_level(self):
+    def fuel_level(self) -> int:
         value = -1
         if self.is_fuel_level_supported:
             if not self.primary_drive == 'electric':
@@ -2116,7 +2143,7 @@ class Vehicle:
         return int(value)
 
     @property
-    def is_fuel_level_supported(self):
+    def is_fuel_level_supported(self) -> bool:
         if self.is_primary_drive_supported:
             if not self.primary_drive == 'electric':
                 if "levelPct" in self.attrs.get('mycar')['engines']['primary']:
@@ -2137,7 +2164,7 @@ class Vehicle:
         return False
 
     @property
-    def is_climatisation_target_temperature_supported(self):
+    def is_climatisation_target_temperature_supported(self) -> bool:
         """Return true if climatisation target temperature is supported."""
         if self.attrs.get('climater', False):
             if 'settings' in self.attrs.get('climater', {}):
@@ -2159,7 +2186,7 @@ class Vehicle:
         return "00:00"
 
     @property
-    def is_climatisation_time_left_supported(self):
+    def is_climatisation_time_left_supported(self) -> bool:
         """Return true if remainingTimeToReachTargetTemperatureInSeconds is supported."""
         if self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', False):
             return True
@@ -2171,14 +2198,13 @@ class Vehicle:
         return self.attrs.get('climater').get('settings').get('climatisationWithoutExternalPower', False)
 
     @property
-    def is_climatisation_without_external_power_supported(self):
+    def is_climatisation_without_external_power_supported(self) -> bool:
         """Return true if climatisation on battery power is supported."""
         if self.attrs.get('climater', False):
             if 'settings' in self.attrs.get('climater', {}):
                 if 'climatisationWithoutExternalPower' in self.attrs.get('climater', {})['settings']:
                     return True
-            else:
-                return False
+        return False
 
     @property
     def outside_temperature(self):
@@ -2190,16 +2216,13 @@ class Vehicle:
             return False
 
     @property
-    def is_outside_temperature_supported(self):
+    def is_outside_temperature_supported(self) -> bool:
         """Return true if outside temp is supported"""
         if self.attrs.get('StoredVehicleDataResponseParsed', False):
             if '0x0301020001' in self.attrs.get('StoredVehicleDataResponseParsed'):
                 if "value" in self.attrs.get('StoredVehicleDataResponseParsed')['0x0301020001']:
                     return True
-                else:
-                    return False
-            else:
-                return False
+        return False
 
     # Climatisation, electric
     @property
@@ -2212,12 +2235,12 @@ class Vehicle:
         return data
 
     @property
-    def is_electric_climatisation_attributes_supported(self):
+    def is_electric_climatisation_attributes_supported(self) -> bool:
         """Return true if vehichle has climater."""
         return self.is_climatisation_supported
 
     @property
-    def electric_climatisation(self):
+    def electric_climatisation(self) -> bool:
         """Return status of climatisation."""
         if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('climatisationState', False):
             climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', '')
@@ -2227,12 +2250,12 @@ class Vehicle:
         return False
 
     @property
-    def is_electric_climatisation_supported(self):
+    def is_electric_climatisation_supported(self) -> bool:
         """Return true if vehichle has climater."""
         return self.is_climatisation_supported
 
     @property
-    def auxiliary_climatisation(self):
+    def auxiliary_climatisation(self) -> bool:
         """Return status of auxiliary climatisation."""
         climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
         status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('climatisationState', '')
@@ -2244,26 +2267,26 @@ class Vehicle:
             return False
 
     @property
-    def is_auxiliary_climatisation_supported(self):
+    def is_auxiliary_climatisation_supported(self) -> bool:
         """Return true if vehicle has auxiliary climatisation."""
         #if self._services.get('rclima_v1', False):
-        if self._relevantCapabilties.get('climatisation', {}).get('active', False):
-            functions = self._services.get('rclima_v1', {}).get('operations', [])
+        #if self._relevantCapabilties.get('climatisation', {}).get('active', False):
+            #functions = self._services.get('rclima_v1', {}).get('operations', [])
             #for operation in functions:
             #    if operation['id'] == 'P_START_CLIMA_AU':
-            if 'P_START_CLIMA_AU' in functions:
-                    return True
+            #if 'P_START_CLIMA_AU' in functions:
+            #        return True
         return False
 
     @property
-    def is_climatisation_supported(self):
+    def is_climatisation_supported(self) -> bool:
         """Return true if climatisation has State."""
         if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('climatisationState', False):
             return True
         return False
 
     @property
-    def window_heater(self):
+    def window_heater(self) -> bool:
         """Return status of window heater."""
         if self.attrs.get('climater', False):
             for elem in self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatus', {}).get('windowHeatingStatus', []):
@@ -2272,7 +2295,7 @@ class Vehicle:
         return False
 
     @property
-    def is_window_heater_supported(self):
+    def is_window_heater_supported(self) -> bool:
         """Return true if vehichle has heater."""
         if self.is_electric_climatisation_supported:
             if self.attrs.get('climater', False):
@@ -2282,7 +2305,7 @@ class Vehicle:
         return False
 
     @property
-    def seat_heating(self):
+    def seat_heating(self) -> bool:
         """Return status of seat heating."""
         if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', False):
             for element in self.attrs.get('airConditioning', {}).get('seatHeatingSupport', {}):
@@ -2291,19 +2314,19 @@ class Vehicle:
         return False
 
     @property
-    def is_seat_heating_supported(self):
+    def is_seat_heating_supported(self) -> bool:
         """Return true if vehichle has seat heating."""
         if self.attrs.get('airConditioning', {}).get('seatHeatingSupport', False):
             return True
         return False
 
     @property
-    def warnings(self):
+    def warnings(self) -> int:
         """Return warnings."""
         return len(self.attrs.get('warninglights', {}).get('statuses',[]))
 
     @property
-    def is_warnings_supported(self):
+    def is_warnings_supported(self) -> bool:
         """Return true if vehichle has warnings."""
         if self.attrs.get('warninglights', False):
             return True
@@ -2322,7 +2345,7 @@ class Vehicle:
             _LOGGER.warning(f'Invalid value for duration: {value}')
 
     @property
-    def is_pheater_duration_supported(self):
+    def is_pheater_duration_supported(self) -> bool:
         return self.is_pheater_heating_supported
 
     @property
@@ -2331,7 +2354,7 @@ class Vehicle:
         return self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False) == 'ventilation'
 
     @property
-    def is_pheater_ventilation_supported(self):
+    def is_pheater_ventilation_supported(self) -> bool:
         """Return true if vehichle has combustion climatisation."""
         return self.is_pheater_heating_supported
 
@@ -2341,10 +2364,12 @@ class Vehicle:
         return self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False) == 'heating'
 
     @property
-    def is_pheater_heating_supported(self):
+    def is_pheater_heating_supported(self) -> bool:
         """Return true if vehichle has combustion engine heating."""
         if self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False):
             return True
+        else:
+            return False
 
     @property
     def pheater_status(self):
@@ -2352,18 +2377,20 @@ class Vehicle:
         return self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', 'Unknown')
 
     @property
-    def is_pheater_status_supported(self):
+    def is_pheater_status_supported(self) -> bool:
         """Return true if vehichle has combustion engine heating/ventilation."""
         if self.attrs.get('heating', {}).get('climatisationStateReport', {}).get('climatisationState', False):
             return True
+        else:
+            return False
 
     # Windows
     @property
-    def windows_closed(self):
+    def windows_closed(self) -> bool:
         return (self.window_closed_left_front and self.window_closed_left_back and self.window_closed_right_front and self.window_closed_right_back)
 
     @property
-    def is_windows_closed_supported(self):
+    def is_windows_closed_supported(self) -> bool:
         """Return true if window state is supported"""
         response = ""
         if self.attrs.get('status', False):
@@ -2380,7 +2407,7 @@ class Vehicle:
             return False
 
     @property
-    def is_window_closed_left_front_supported(self):
+    def is_window_closed_left_front_supported(self) -> bool:
         """Return true if window state is supported"""
         response = ""
         if self.attrs.get('status', False):
@@ -2389,7 +2416,7 @@ class Vehicle:
         return True if response != "" else False
 
     @property
-    def window_closed_right_front(self):
+    def window_closed_right_front(self) -> bool:
         response = self.attrs.get('status')['windows'].get('frontRight', '')
         if response == 'closed':
             return True
@@ -2397,7 +2424,7 @@ class Vehicle:
             return False
 
     @property
-    def is_window_closed_right_front_supported(self):
+    def is_window_closed_right_front_supported(self) -> bool:
         """Return true if window state is supported"""
         response = ""
         if self.attrs.get('status', False):
@@ -2406,7 +2433,7 @@ class Vehicle:
         return True if response != "" else False
 
     @property
-    def window_closed_left_back(self):
+    def window_closed_left_back(self) -> bool:
         response = self.attrs.get('status')['windows'].get('rearLeft', '')
         if response == 'closed':
             return True
@@ -2414,7 +2441,7 @@ class Vehicle:
             return False
 
     @property
-    def is_window_closed_left_back_supported(self):
+    def is_window_closed_left_back_supported(self) -> bool:
         """Return true if window state is supported"""
         response = ""
         if self.attrs.get('status', False):
@@ -2423,7 +2450,7 @@ class Vehicle:
         return True if response != "" else False
 
     @property
-    def window_closed_right_back(self):
+    def window_closed_right_back(self) -> bool:
         response = self.attrs.get('status')['windows'].get('rearRight', '')
         if response == 'closed':
             return True
@@ -2431,7 +2458,7 @@ class Vehicle:
             return False
 
     @property
-    def is_window_closed_right_back_supported(self):
+    def is_window_closed_right_back_supported(self) -> bool:
         """Return true if window state is supported"""
         response = ""
         if self.attrs.get('status', False):
@@ -2440,7 +2467,7 @@ class Vehicle:
         return True if response != "" else False
 
     @property
-    def sunroof_closed(self):
+    def sunroof_closed(self) -> bool:
         # Due to missing test objects, it is yet unclear, if 'sunroof' is direct subentry of 'status' or a subentry of 'windows'. So both are checked.
         response = ""
         if 'sunRoof' in self.attrs.get('status'):
@@ -2453,7 +2480,7 @@ class Vehicle:
             return False
 
     @property
-    def is_sunroof_closed_supported(self):
+    def is_sunroof_closed_supported(self) -> bool:
         """Return true if sunroof state is supported"""
         # Due to missing test objects, it is yet unclear, if 'sunroof' is direct subentry of 'status' or a subentry of 'windows'. So both are checked.
         response = ""
@@ -2466,7 +2493,7 @@ class Vehicle:
 
     # Locks
     @property
-    def door_locked(self):
+    def door_locked(self) -> bool:
         # LEFT FRONT
         response = self.attrs.get('status')['doors']['frontLeft'].get('locked', 'false')
         if response != 'true':
@@ -2487,7 +2514,7 @@ class Vehicle:
         return True
 
     @property
-    def is_door_locked_supported(self):
+    def is_door_locked_supported(self) -> bool:
         response = 0
         if self.attrs.get('status', False):
             if 'doors' in self.attrs.get('status'):
@@ -2500,7 +2527,7 @@ class Vehicle:
         return True if locked == 'true' else False
 
     @property
-    def is_trunk_locked_supported(self):
+    def is_trunk_locked_supported(self) -> bool:
         if self.attrs.get('status', False):
             if 'trunk' in self.attrs.get('status'):
                 if 'locked' in self.attrs.get('status').get('trunk'):
@@ -2515,7 +2542,7 @@ class Vehicle:
         return True if open == 'false' else False
 
     @property
-    def is_hood_closed_supported(self):
+    def is_hood_closed_supported(self) -> bool:
         """Return true if hood state is supported"""
         response = 0
         if self.attrs.get('status', False):
@@ -2529,7 +2556,7 @@ class Vehicle:
         return True if open == 'false' else False
 
     @property
-    def is_door_closed_left_front_supported(self):
+    def is_door_closed_left_front_supported(self) -> bool:
         """Return true if window state is supported"""
         if self.attrs.get('status', False):
             if 'doors' in self.attrs.get('status'):
@@ -2543,7 +2570,7 @@ class Vehicle:
         return True if open == 'false' else False
 
     @property
-    def is_door_closed_right_front_supported(self):
+    def is_door_closed_right_front_supported(self) -> bool:
         """Return true if window state is supported"""
         if self.attrs.get('status', False):
             if 'doors' in self.attrs.get('status'):
@@ -2557,7 +2584,7 @@ class Vehicle:
         return True if open == 'false' else False
 
     @property
-    def is_door_closed_left_back_supported(self):
+    def is_door_closed_left_back_supported(self) -> bool:
         if self.attrs.get('status', False):
             if 'doors' in self.attrs.get('status'):
                 if 'rearLeft' in self.attrs.get('status').get('doors', {}):
@@ -2570,7 +2597,7 @@ class Vehicle:
         return True if open == 'false' else False
 
     @property
-    def is_door_closed_right_back_supported(self):
+    def is_door_closed_right_back_supported(self) -> bool:
         """Return true if window state is supported"""
         if self.attrs.get('status', False):
             if 'doors' in self.attrs.get('status'):
@@ -2584,7 +2611,7 @@ class Vehicle:
         return True if open == 'false' else False
 
     @property
-    def is_trunk_closed_supported(self):
+    def is_trunk_closed_supported(self) -> bool:
         """Return true if window state is supported"""
         response = 0
         if self.attrs.get('status', False):
@@ -2622,7 +2649,7 @@ class Vehicle:
         return None
 
     @property
-    def is_departure1_supported(self):
+    def is_departure1_supported(self) -> bool:
         """Return true if timer 1 is supported."""
         if len(self.attrs.get('departureTimers', {}).get('timers', [])) >= 1:
             return True
@@ -2659,7 +2686,7 @@ class Vehicle:
         return None
 
     @property
-    def is_departure2_supported(self):
+    def is_departure2_supported(self) -> bool:
         """Return true if timer 2 is supported."""
         if len(self.attrs.get('departureTimers', {}).get('timers', [])) >= 2:
             return True
@@ -2696,7 +2723,7 @@ class Vehicle:
         return None
 
     @property
-    def is_departure3_supported(self):
+    def is_departure3_supported(self) -> bool:
         """Return true if timer 3 is supported."""
         if len(self.attrs.get('departureTimers', {}).get('timers', [])) >= 3:
             return True
@@ -2723,7 +2750,7 @@ class Vehicle:
         return None
 
     @property
-    def is_departure_profile1_supported(self):
+    def is_departure_profile1_supported(self) -> bool:
         """Return true if profile 1 is supported."""
         if len(self.attrs.get('departureProfiles', {}).get('timers', [])) >= 1:
             return True
@@ -2747,7 +2774,7 @@ class Vehicle:
         return None
 
     @property
-    def is_departure_profile2_supported(self):
+    def is_departure_profile2_supported(self) -> bool:
         """Return true if profile 2 is supported."""
         if len(self.attrs.get('departureProfiles', {}).get('timers', [])) >= 2:
             return True
@@ -2771,7 +2798,7 @@ class Vehicle:
         return None
 
     @property
-    def is_departure_profile3_supported(self):
+    def is_departure_profile3_supported(self) -> bool:
         """Return true if profile 3 is supported."""
         if len(self.attrs.get('departureProfiles', {}).get('timers', [])) >= 3:
             return True
@@ -2787,40 +2814,48 @@ class Vehicle:
         return self.trip_last_entry.get('averageSpeedKmph')
 
     @property
-    def is_trip_last_average_speed_supported(self):
+    def is_trip_last_average_speed_supported(self) -> bool:
         response = self.trip_last_entry
         if response and type(response.get('averageSpeedKmph', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_average_electric_consumption(self):
         return self.trip_last_entry.get('averageElectricConsumption')
 
     @property
-    def is_trip_last_average_electric_consumption_supported(self):
+    def is_trip_last_average_electric_consumption_supported(self) -> bool:
         response = self.trip_last_entry
         if response and type(response.get('averageElectricConsumption', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_average_fuel_consumption(self):
         return self.trip_last_entry.get('averageFuelConsumption')
 
     @property
-    def is_trip_last_average_fuel_consumption_supported(self):
+    def is_trip_last_average_fuel_consumption_supported(self) -> bool:
         response = self.trip_last_entry
         if response and type(response.get('averageFuelConsumption', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_average_auxillary_consumption(self):
         return self.trip_last_entry.get('averageAuxConsumption')
 
     @property
-    def is_trip_last_average_auxillary_consumption_supported(self):
+    def is_trip_last_average_auxillary_consumption_supported(self) -> bool:
         response = self.trip_last_entry
         if response and type(response.get('averageAuxConsumption', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_average_aux_consumer_consumption(self):
@@ -2828,30 +2863,36 @@ class Vehicle:
         return value
 
     @property
-    def is_trip_last_average_aux_consumer_consumption_supported(self):
+    def is_trip_last_average_aux_consumer_consumption_supported(self) -> bool:
         response = self.trip_last_entry
         if response and type(response.get('averageAuxConsumerConsumption', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_duration(self):
         return self.trip_last_entry.get('travelTime')
 
     @property
-    def is_trip_last_duration_supported(self):
+    def is_trip_last_duration_supported(self) -> bool:
         response = self.trip_last_entry
         if response and type(response.get('travelTime', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_length(self):
         return self.trip_last_entry.get('mileageKm')
 
     @property
-    def is_trip_last_length_supported(self):
+    def is_trip_last_length_supported(self) -> bool:
         response = self.trip_last_entry
         if response and type(response.get('mileageKm', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_recuperation(self):
@@ -2859,11 +2900,13 @@ class Vehicle:
         return self.trip_last_entry.get('recuperation')
 
     @property
-    def is_trip_last_recuperation_supported(self):
+    def is_trip_last_recuperation_supported(self) -> bool:
         #Not implemented
         response = self.trip_last_entry
         if response and type(response.get('recuperation', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_average_recuperation(self):
@@ -2872,11 +2915,13 @@ class Vehicle:
         return value
 
     @property
-    def is_trip_last_average_recuperation_supported(self):
+    def is_trip_last_average_recuperation_supported(self) -> bool:
         #Not implemented
         response = self.trip_last_entry
         if response and type(response.get('averageRecuperation', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_total_electric_consumption(self):
@@ -2884,11 +2929,13 @@ class Vehicle:
         return self.trip_last_entry.get('totalElectricConsumption')
 
     @property
-    def is_trip_last_total_electric_consumption_supported(self):
+    def is_trip_last_total_electric_consumption_supported(self) -> bool:
         #Not implemented
         response = self.trip_last_entry
         if response and type(response.get('totalElectricConsumption', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_cycle_entry(self):
@@ -2899,40 +2946,48 @@ class Vehicle:
         return self.trip_last_cycle_entry.get('averageSpeedKmph')
 
     @property
-    def is_trip_last_cycle_average_speed_supported(self):
+    def is_trip_last_cycle_average_speed_supported(self) -> bool:
         response = self.trip_last_cycle_entry
         if response and type(response.get('averageSpeedKmph', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_cycle_average_electric_consumption(self):
         return self.trip_last_cycle_entry.get('averageElectricConsumption')
 
     @property
-    def is_trip_last_cycle_average_electric_consumption_supported(self):
+    def is_trip_last_cycle_average_electric_consumption_supported(self) -> bool:
         response = self.trip_last_cycle_entry
         if response and type(response.get('averageElectricConsumption', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_cycle_average_fuel_consumption(self):
         return self.trip_last_cycle_entry.get('averageFuelConsumption')
 
     @property
-    def is_trip_last_cycle_average_fuel_consumption_supported(self):
+    def is_trip_last_cycle_average_fuel_consumption_supported(self) -> bool:
         response = self.trip_last_cycle_entry
         if response and type(response.get('averageFuelConsumption', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_cycle_average_auxillary_consumption(self):
         return self.trip_last_cycle_entry.get('averageAuxConsumption')
 
     @property
-    def is_trip_last_cycle_average_auxillary_consumption_supported(self):
+    def is_trip_last_cycle_average_auxillary_consumption_supported(self) -> bool:
         response = self.trip_last_cycle_entry
         if response and type(response.get('averageAuxConsumption', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_cycle_average_aux_consumer_consumption(self):
@@ -2940,71 +2995,83 @@ class Vehicle:
         return value
 
     @property
-    def is_trip_last_cycle_average_aux_consumer_consumption_supported(self):
+    def is_trip_last_cycle_average_aux_consumer_consumption_supported(self) -> bool:
         response = self.trip_last_cycle_entry
         if response and type(response.get('averageAuxConsumerConsumption', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
     def trip_last_cycle_duration(self):
         return self.trip_last_cycle_entry.get('travelTime')
 
     @property
-    def is_trip_last_cycle_duration_supported(self):
+    def is_trip_last_cycle_duration_supported(self) -> bool:
         response = self.trip_last_cycle_entry
         if response and type(response.get('travelTime', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
-    def trip_last_cycle_length(self):
+    def trip_last_cycle_length(self) -> int:
         return self.trip_last_cycle_entry.get('mileageKm')
 
     @property
-    def is_trip_last_cycle_length_supported(self):
+    def is_trip_last_cycle_length_supported(self) -> bool:
         response = self.trip_last_cycle_entry
         if response and type(response.get('mileageKm', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
-    def trip_last_cycle_recuperation(self):
+    def trip_last_cycle_recuperation(self) -> float:
         #Not implemented
         return self.trip_last_cycle_entry.get('recuperation')
 
     @property
-    def is_trip_last_cycle_recuperation_supported(self):
+    def is_trip_last_cycle_recuperation_supported(self) -> bool:
         #Not implemented
         response = self.trip_last_cycle_entry
         if response and type(response.get('recuperation', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
-    def trip_last_cycle_average_recuperation(self):
+    def trip_last_cycle_average_recuperation(self) -> float:
         #Not implemented
         value = self.trip_last_cycle_entry.get('averageRecuperation')
         return value
 
     @property
-    def is_trip_last_cycle_average_recuperation_supported(self):
+    def is_trip_last_cycle_average_recuperation_supported(self) -> bool:
         #Not implemented
         response = self.trip_last_cycle_entry
         if response and type(response.get('averageRecuperation', None)) in (float, int):
             return True
+        else:
+            return False
 
     @property
-    def trip_last_cycle_total_electric_consumption(self):
+    def trip_last_cycle_total_electric_consumption(self) -> float:
         #Not implemented
         return self.trip_last_cycle_entry.get('totalElectricConsumption')
 
     @property
-    def is_trip_last_cycle_total_electric_consumption_supported(self):
+    def is_trip_last_cycle_total_electric_consumption_supported(self) -> bool:
         #Not implemented
         response = self.trip_last_cycle_entry
         if response and type(response.get('totalElectricConsumption', None)) in (float, int):
             return True
+        else:
+            return False
 
     # Area alarm
     @property
-    def area_alarm(self):
+    def area_alarm(self) -> bool:
         """Return True, if attribute areaAlarm is not {}"""
         alarmPresent = self.attrs.get('areaAlarm', {})
         if alarmPresent !={}:
@@ -3016,7 +3083,7 @@ class Vehicle:
         return False if alarmPresent == {} else True
 
     @property
-    def is_area_alarm_supported(self):
+    def is_area_alarm_supported(self) -> bool:
         """Return True, if vehicle supports area alarm (always True at the moment)"""
         # Always True at the moment. Have to check, if the geofence capability is a necessary condition
         return True
@@ -3028,7 +3095,7 @@ class Vehicle:
         return self._requests.get('refresh', {}).get('status', 'None')
 
     @property
-    def refresh_action_timestamp(self):
+    def refresh_action_timestamp(self) -> str:
         """Return timestamp of latest data refresh request."""
         timestamp = self._requests.get('refresh', {}).get('timestamp', DATEZERO)
         return timestamp.strftime("%Y-%m-%d %H:%M:%S")
@@ -3039,7 +3106,7 @@ class Vehicle:
         return self._requests.get('batterycharge', {}).get('status', 'None')
 
     @property
-    def charger_action_timestamp(self):
+    def charger_action_timestamp(self) -> str:
         """Return timestamp of latest charger request."""
         timestamp = self._requests.get('charger', {}).get('timestamp', DATEZERO)
         return timestamp.strftime("%Y-%m-%d %H:%M:%S")
@@ -3050,7 +3117,7 @@ class Vehicle:
         return self._requests.get('climatisation', {}).get('status', 'None')
 
     @property
-    def climater_action_timestamp(self):
+    def climater_action_timestamp(self) -> str:
         """Return timestamp of latest climater request."""
         timestamp = self._requests.get('climatisation', {}).get('timestamp', DATEZERO)
         return timestamp.strftime("%Y-%m-%d %H:%M:%S")
@@ -3061,7 +3128,7 @@ class Vehicle:
         return self._requests.get('preheater', {}).get('status', 'None')
 
     @property
-    def pheater_action_timestamp(self):
+    def pheater_action_timestamp(self) -> str:
         """Return timestamp of latest parking heater request."""
         timestamp = self._requests.get('preheater', {}).get('timestamp', DATEZERO)
         return timestamp.strftime("%Y-%m-%d %H:%M:%S")
@@ -3072,7 +3139,7 @@ class Vehicle:
         return self._requests.get('honkandflash', {}).get('status', 'None')
 
     @property
-    def honkandflash_action_timestamp(self):
+    def honkandflash_action_timestamp(self) -> str:
         """Return timestamp of latest honk and flash request."""
         timestamp = self._requests.get('honkandflash', {}).get('timestamp', DATEZERO)
         return timestamp.strftime("%Y-%m-%d %H:%M:%S")
@@ -3083,7 +3150,7 @@ class Vehicle:
         return self._requests.get('lock', {}).get('status', 'None')
 
     @property
-    def lock_action_timestamp(self):
+    def lock_action_timestamp(self) -> str:
         """Return timestamp of latest lock action request."""
         timestamp = self._requests.get('lock', {}).get('timestamp', DATEZERO)
         return timestamp.strftime("%Y-%m-%d %H:%M:%S")
@@ -3094,13 +3161,13 @@ class Vehicle:
         return self._requests.get('departuretimer', {}).get('status', 'None')
 
     @property
-    def timer_action_timestamp(self):
+    def timer_action_timestamp(self) -> str:
         """Return timestamp of latest departure timer request."""
         timestamp = self._requests.get('departuretimer', {}).get('timestamp', DATEZERO)
         return timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
     @property
-    def refresh_data(self):
+    def refresh_data(self) -> bool:
         """Get state of data refresh"""
         #if self._requests.get('refresh', {}).get('id', False):
         #    timestamp = self._requests.get('refresh', {}).get('timestamp', DATEZERO)
@@ -3111,47 +3178,53 @@ class Vehicle:
         return False
 
     @property
-    def is_refresh_data_supported(self):
+    def is_refresh_data_supported(self) -> bool:
         """Data refresh is supported."""
         if self._connectivities.get('mode', '') == 'online':
             return True
+        else:
+            return False
 
     @property
-    def update_data(self):
+    def update_data(self) -> bool:
         """Get state of data update"""
         return False
 
     @property
-    def is_update_data_supported(self):
+    def is_update_data_supported(self) -> bool:
         """Data update is supported."""
         return True
 
     # Honk and flash
     @property
-    def request_honkandflash(self):
+    def request_honkandflash(self) -> bool:
         """State is always False"""
         return False
 
     @property
-    def is_request_honkandflash_supported(self):
+    def is_request_honkandflash_supported(self) -> bool:
         """Honk and flash is supported if service is enabled."""
         if self._relevantCapabilties.get('honkAndFlash', {}).get('active', False):
             return True
+        else:
+            return False
 
     @property
-    def request_flash(self):
+    def request_flash(self) -> bool:
         """State is always False"""
         return False
 
     @property
-    def is_request_flash_supported(self):
+    def is_request_flash_supported(self) -> bool:
         """Honk and flash is supported if service is enabled."""
         if self._relevantCapabilties.get('honkAndFlash', {}).get('active', False):
             return True
+        else:
+            return False
 
     # Requests data
     @property
-    def request_in_progress(self):
+    def request_in_progress(self) -> bool:
         """Request in progress is always supported."""
         try:
             for section in self._requests:
@@ -3162,12 +3235,12 @@ class Vehicle:
         return False
 
     @property
-    def is_request_in_progress_supported(self):
+    def is_request_in_progress_supported(self) -> bool:
         """Request in progress is always supported."""
         return False
 
     @property
-    def request_results(self):
+    def request_results(self) -> dict:
         """Get last request result."""
         data = {
             'latest': self._requests.get('latest', 'N/A'),
@@ -3181,13 +3254,13 @@ class Vehicle:
         return data
 
     @property
-    def is_request_results_supported(self):
+    def is_request_results_supported(self) -> bool:
         """Request results is supported if in progress is supported."""
         return False # deactivated because it provides no usefull information
         #return self.is_request_in_progress_supported
 
     @property
-    def requests_remaining(self):
+    def requests_remaining(self) -> int:
         """Get remaining requests before throttled."""
         if self.attrs.get('rate_limit_remaining', False):
             self.requests_remaining = self.attrs.get('rate_limit_remaining')
@@ -3195,21 +3268,21 @@ class Vehicle:
         return self._requests['remaining']
 
     @requests_remaining.setter
-    def requests_remaining(self, value):
+    def requests_remaining(self, value) -> None:
         self._requests['remaining'] = value
 
     @property
-    def is_requests_remaining_supported(self):
+    def is_requests_remaining_supported(self) -> bool:
         return False # deactivated because it provides no usefull information
         #if self.is_request_in_progress_supported:
         #    return True if self._requests.get('remaining', False) else False
 
     #### Helper functions ####
-    def __str__(self):
+    def __str__(self) -> str:
         return self.vin
 
     @property
-    def json(self):
+    def json(self) -> str:
         def serialize(obj):
             if isinstance(obj, datetime):
                 return obj.isoformat()
@@ -3221,7 +3294,7 @@ class Vehicle:
         )
 
 
-    async def stopFirebase(self):
+    async def stopFirebase(self) -> int:
         # Check if firebase is activated
         if self.firebaseStatus not in (FIREBASE_STATUS_ACTIVATED, FIREBASE_STATUS_ACTIVATION_STOPPED):
             _LOGGER.info(f'No need to stop firebase. Firebase status={self.firebaseStatus}')
@@ -3242,7 +3315,7 @@ class Vehicle:
         _LOGGER.info('Stopping of firebase messaging was successful.')
         return self.firebaseStatus
 
-    async def initialiseFirebase(self, firebaseCredentialsFileName=None, updateCallback=None):
+    async def initialiseFirebase(self, firebaseCredentialsFileName='', updateCallback=None) -> int:
         # Check if firebase shall be used
         if firebaseCredentialsFileName == None:
             _LOGGER.debug('No use of firebase wanted.')
@@ -3297,7 +3370,7 @@ class Vehicle:
 
 
 
-    async def onNotification(self, obj, notification, data_message):
+    async def onNotification(self, obj: Any, notification: str, data_message: Any) -> None:
         # Do something with the notification
         _LOGGER.debug(f'Received push notification: notification id={notification}, type={obj.get('data',{}).get('type','')}, requestId={obj.get('data',{}).get('requestId','[None]')}')
         _LOGGER.debug(f'   data_message={data_message}, payload={obj.get('data',{}).get('payload','[None]')}')
@@ -3306,7 +3379,7 @@ class Vehicle:
             if self.firebaseStatus != FIREBASE_STATUS_ACTIVATION_STOPPED:
                 _LOGGER.info(f'While firebase is not fully activated, received notifications are just acknowledged.')
                 # As long as the firebase status is not set to activated, ignore the notifications
-                return False 
+                return
             else:
                 # It seems that the firebase connection still works although fcmpushclient.is_started() returned False some time ago
                 _LOGGER.info(f'Firebase status={self.firebaseStatus}, but PyCupra still receives push notifications.')
@@ -3325,7 +3398,7 @@ class Vehicle:
 
         if notification == self._firebaseLastMessageId:
             _LOGGER.info(f'Received notification {notification} again. Just acknoledging it, nothing to do.')
-            return False
+            return 
 
         self._firebaseLastMessageId = notification # save the id of the last notification
         if type in ('vehicle-access-locked-successful', 'vehicle-access-unlocked-successful'): # vehicle was locked/unlocked
@@ -3388,7 +3461,7 @@ class Vehicle:
                 _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last get_charger was at {self._last_get_charger}. So no need to update.')
                 # Wait 5 seconds
                 await asyncio.sleep(5)
-        elif type in ('climatisation-status-changed','climatisation-started', 'climatisation-stopped', 'climatisation-settings-updated'):
+        elif type in ('climatisation-status-changed','climatisation-started', 'climatisation-stopped', 'climatisation-settings-updated', 'climatisation-error-fail'):
             if self._requests.get('climatisation', {}).get('id', None):
                 openRequest= self._requests.get('climatisation', {}).get('id', None)
                 if openRequest == requestId:

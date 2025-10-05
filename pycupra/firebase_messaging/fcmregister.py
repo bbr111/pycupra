@@ -63,8 +63,8 @@ class FcmRegister:
     def __init__(
         self,
         config: FcmRegisterConfig,
-        credentials: dict | None = None,
-        credentials_updated_callback: Callable[[dict[str, Any]], None] | None = None,
+        credentials: dict,
+        credentials_updated_callback, #: Callable[[dict[str, Any], str], None] ,
         *,
         http_client_session: ClientSession | None = None,
         log_debug_verbose: bool = False,
@@ -456,7 +456,7 @@ class FcmRegister:
                 return self.credentials
 
         self.credentials = await self.register()
-        if self.credentials_updated_callback:
+        if True: #self.credentials_updated_callback != None:
             await self.credentials_updated_callback(self.credentials, fcmCredentialsFileName)
 
         return self.credentials

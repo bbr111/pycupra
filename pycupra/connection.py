@@ -16,6 +16,7 @@ import secrets
 import xmltodict
 from copy import deepcopy
 import importlib.metadata
+from typing import Any
 
 from PIL import Image
 from io import BytesIO
@@ -28,7 +29,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 from base64 import b64decode, b64encode, urlsafe_b64decode, urlsafe_b64encode
 #from .__version__ import __version__ as lib_version
-from .utilities import read_config, json_loads
+from .utilities import json_loads
 from .vehicle import Vehicle
 from .exceptions import (
     SeatConfigException,
@@ -227,7 +228,7 @@ class Connection:
             return False
 
   # API login/logout/authorization
-    async def doLogin(self,**data):
+    async def doLogin(self,**data) -> bool:
         """Login method, clean login or use token from file and refresh it"""
         #if len(self._session_tokens) > 0:
         #    _LOGGER.info('Revoking old tokens.')
@@ -241,7 +242,7 @@ class Connection:
         self._clear_cookies()
         self._vehicles.clear()
         self._session_tokens = {}
-        self._session_headers = HEADERS_SESSION.get(self._session_auth_brand).copy()
+        self._session_headers = HEADERS_SESSION.get(self._session_auth_brand, HEADERS_SESSION['cupra']).copy()
         self._session_auth_headers = HEADERS_AUTH.copy()
         self._session_nonce = self._getNonce()
         self._session_state = self._getState()
@@ -260,7 +261,7 @@ class Connection:
         _LOGGER.info('Initiating new login with user name and password.')
         return await self._authorize(self._session_auth_brand)
 
-    async def _authorize(self, client=BRAND_CUPRA):
+    async def _authorize(self, client=BRAND_CUPRA) -> bool:
         """"Login" function. Authorize a certain client type and get tokens."""
         # Helper functions
         def extract_csrf(req):
@@ -287,8 +288,8 @@ class Connection:
             oauthClient = OAuth2Session(client_id=CLIENT_LIST[client].get('CLIENT_ID'), scope=CLIENT_LIST[client].get('SCOPE'), redirect_uri=CLIENT_LIST[client].get('REDIRECT_URL'))
             code_verifier = urlsafe_b64encode(os.urandom(40)).decode('utf-8')
             code_verifier = re.sub('[^a-zA-Z0-9]+', '', code_verifier)
-            code_challenge = hashlib.sha256(code_verifier.encode("utf-8")).digest()
-            code_challenge = urlsafe_b64encode(code_challenge).decode("utf-8")
+            code_challenge_hash = hashlib.sha256(code_verifier.encode("utf-8")).digest()
+            code_challenge = urlsafe_b64encode(code_challenge_hash).decode("utf-8")
             code_challenge = code_challenge.replace("=", "")
             authorization_url, state = oauthClient.authorization_url(authorizationEndpoint, code_challenge=code_challenge, code_challenge_method='S256', 
                                                                         nonce=self._session_nonce, state=self._session_state)
@@ -344,19 +345,19 @@ class Connection:
                     if location is None:
                         raise SeatException('Login failed')
                     if 'error' in location:
-                        error = parse_qs(urlparse(location).query).get('error', '')[0]
-                        if error == 'login.error.throttled':
+                        errorTxt = parse_qs(urlparse(location).query).get('error', '')[0]
+                        if errorTxt == 'login.error.throttled':
                             timeout = parse_qs(urlparse(location).query).get('enableNextButtonAfterSeconds', '')[0]
                             raise SeatAccountLockedException(f'Account is locked for another {timeout} seconds')
-                        elif error == 'login.errors.password_invalid':
+                        elif errorTxt == 'login.errors.password_invalid':
                             raise SeatAuthenticationException('Invalid credentials')
                         else:
-                            _LOGGER.warning(f'Login failed: {error}')
-                        raise SeatLoginFailedException(error)
+                            _LOGGER.warning(f'Login failed: {errorTxt}')
+                        raise SeatLoginFailedException(errorTxt)
                     if 'terms-and-conditions' in location:
                         raise SeatEULAException('The terms and conditions must be accepted first at your local SEAT/Cupra site, e.g. "https://cupraofficial.se/"')
                     if 'user_id' in location: # Get the user_id which is needed for some later requests
-                        self._user_id=parse_qs(urlparse(location).query).get('user_id')[0]
+                        self._user_id=parse_qs(urlparse(location).query).get('user_id', [''])[0]
                         self.addToAnonymisationDict(self._user_id,'[USER_ID_ANONYMISED]')
                         #_LOGGER.debug('Got user_id: %s' % self._user_id)
                     if self._session_fulldebug:
@@ -388,7 +389,7 @@ class Connection:
 
             _LOGGER.debug('Received authorization code, exchange for tokens.')
             # Extract code and tokens
-            auth_code = parse_qs(urlparse(location).query).get('code')[0]
+            auth_code = parse_qs(urlparse(location).query).get('code', [''])[0]
             # Save access, identity and refresh tokens according to requested client"""
             if client=='cupra':
                 # oauthClient.fetch_token() does not work in home assistant, using POST request instead
@@ -431,12 +432,12 @@ class Connection:
                 if '_token' in key:
                     self._session_tokens[client][key] = token_data[key]
             if 'error' in self._session_tokens[client]:
-                error = self._session_tokens[client].get('error', '')
+                errorTxt = self._session_tokens[client].get('error', '')
                 if 'error_description' in self._session_tokens[client]:
                     error_description = self._session_tokens[client].get('error_description', '')
-                    raise SeatException(f'{error} - {error_description}')
+                    raise SeatException(f'{errorTxt} - {error_description}')
                 else:
-                    raise SeatException(error)
+                    raise SeatException(errorTxt)
             if self._session_fulldebug:
                 for key in self._session_tokens.get(client, {}):
                     if 'token' in key:
@@ -559,7 +560,7 @@ class Connection:
         )
         return req.headers.get('Location', None)
 
-    async def terminate(self):
+    async def terminate(self) -> None:
         """Log out from connect services"""
         for v in self.vehicles:
             _LOGGER.debug(self.anonymise(f'Calling stopFirebase() for vehicle {v.vin}'))
@@ -570,7 +571,7 @@ class Connection:
                 v.firebaseStatus = FIREBASE_STATUS_NOT_INITIALISED
         await self.logout()
 
-    async def logout(self):
+    async def logout(self) -> None:
         """Logout, revoke tokens."""
         _LOGGER.info(f'Initiating logout.')
         self._session_headers.pop('Authorization', None)
@@ -631,6 +632,9 @@ class Connection:
             return data
         except Exception as e:
             _LOGGER.debug(f'Got non HTTP related error: {e}')
+            return {
+                'error_description': 'Non HTTP related error'
+            }
 
     async def post(self, url, **data):
         """Perform a HTTP POST."""
@@ -748,7 +752,7 @@ class Connection:
         return False
 
   # Class get data functions
-    async def update_all(self):
+    async def update_all(self) -> bool:
         """Update status."""
         try:
             # Get all Vehicle objects and update in parallell
@@ -773,7 +777,7 @@ class Connection:
             raise
         return False
 
-    async def get_userData(self):
+    async def get_userData(self) -> dict:
         """Fetch user profile."""
         await self.set_token(self._session_auth_brand)
         userData={}
@@ -798,7 +802,7 @@ class Connection:
         self._userData=userData
         return userData
 
-    async def get_vehicles(self):
+    async def get_vehicles(self) -> list:
         """Fetch vehicle information from user profile."""
         api_vehicles = []
         # Check if user needs to update consent
@@ -938,7 +942,7 @@ class Connection:
             _LOGGER.debug(f'Could not get consent information, error {error}')
         return False"""
 
-    async def getBasicCarData(self, vin, baseurl):
+    async def getBasicCarData(self, vin, baseurl) -> dict | bool:
         """Get car information from customer profile, VIN, nickname, etc."""
         await self.set_token(self._session_auth_brand)
         data={}
@@ -956,7 +960,7 @@ class Connection:
             return False
         return data
 
-    async def getMileage(self, vin, baseurl):
+    async def getMileage(self, vin, baseurl) -> dict | bool:
         """Get car information from customer profile, VIN, nickname, etc."""
         await self.set_token(self._session_auth_brand)
         data={}
@@ -974,7 +978,7 @@ class Connection:
             return False
         return data
 
-    async def getVehicleHealthWarnings(self, vin, baseurl):
+    async def getVehicleHealthWarnings(self, vin, baseurl) -> dict | bool:
         """Get car information from customer profile, VIN, nickname, etc."""
         await self.set_token(self._session_auth_brand)
         data={}
@@ -1010,7 +1014,7 @@ class Connection:
             data = {'error': 'unknown'}
         return data"""
 
-    async def getModelImageURL(self, vin, baseurl):
+    async def getModelImageURL(self, vin, baseurl) -> dict | None:
         """Construct the URL for the model image."""
         await self.set_token(self._session_auth_brand)
         try:
@@ -1019,7 +1023,7 @@ class Connection:
                     url=eval(f"f'{API_IMAGE}'"),
                 )
                 if response.get('front',False):
-                    images={}
+                    images: dict[str, str] ={}
                     for pos in {'front', 'side', 'top', 'rear'}:
                         if pos in response:
                             pic = await self._request(
@@ -1060,7 +1064,7 @@ class Connection:
             _LOGGER.debug('Could not fetch Model image URL, message signing failed.')
         return None
 
-    async def getVehicleStatusReport(self, vin, baseurl):
+    async def getVehicleStatusReport(self, vin, baseurl) -> dict | bool:
         """Get stored vehicle status report (Connect services)."""
         data={}
         await self.set_token(self._session_auth_brand)
@@ -1078,7 +1082,7 @@ class Connection:
             return False
         return data
 
-    async def getMaintenance(self, vin, baseurl):
+    async def getMaintenance(self, vin, baseurl) -> dict | bool:
         """Get stored vehicle status report (Connect services)."""
         data={}
         await self.set_token(self._session_auth_brand)
@@ -1096,7 +1100,7 @@ class Connection:
             return False
         return data
 
-    async def getTripStatistics(self, vin, baseurl, supportsCyclicTrips):
+    async def getTripStatistics(self, vin, baseurl, supportsCyclicTrips) -> dict | bool:
         """Get short term and cyclic trip statistics."""
         await self.set_token(self._session_auth_brand)
         if self._session_tripStatisticsStartDate==None:
@@ -1106,7 +1110,7 @@ class Connection:
         else:
             startDate = self._session_tripStatisticsStartDate
         try:
-            data={'tripstatistics': {}}
+            data: dict[str, dict] ={'tripstatistics': {}} 
             if supportsCyclicTrips:
                 dataType='CYCLIC'
                 response = await self.get(eval(f"f'{API_TRIP}'"))
@@ -1136,7 +1140,7 @@ class Connection:
             _LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
         return False
 
-    async def getPosition(self, vin, baseurl):
+    async def getPosition(self, vin, baseurl) -> dict | bool:
         """Get position data."""
         await self.set_token(self._session_auth_brand)
         try:
@@ -1171,7 +1175,7 @@ class Connection:
             _LOGGER.warning(f'Could not fetch position, error: {error}')
         return False
 
-    async def getDeparturetimer(self, vin, baseurl):
+    async def getDeparturetimer(self, vin, baseurl) -> dict | bool:
         """Get departure timers."""
         await self.set_token(self._session_auth_brand)
         try:
@@ -1188,7 +1192,7 @@ class Connection:
             _LOGGER.warning(f'Could not fetch departure timers, error: {error}')
         return False
 
-    async def getDepartureprofiles(self, vin, baseurl):
+    async def getDepartureprofiles(self, vin, baseurl) -> dict | bool:
         """Get departure timers."""
         await self.set_token(self._session_auth_brand)
         try:
@@ -1210,7 +1214,7 @@ class Connection:
             _LOGGER.warning(f'Could not fetch departure profiles, error: {error}')
         return False
 
-    async def getClimater(self, vin, baseurl, oldClimatingData):
+    async def getClimater(self, vin, baseurl, oldClimatingData) -> dict | bool:
         """Get climatisation data."""
         #data={}
         #data['climater']={}
@@ -1240,7 +1244,7 @@ class Connection:
             return False
         return data
 
-    async def getCharger(self, vin, baseurl, oldChargingData):
+    async def getCharger(self, vin, baseurl, oldChargingData) -> dict | bool:
         """Get charger data."""
         await self.set_token(self._session_auth_brand)
         try:
@@ -1298,7 +1302,7 @@ class Connection:
             _LOGGER.warning(f'Could not fetch charger, error: {error}')
         return False
 
-    async def getPreHeater(self, vin, baseurl):
+    async def getPreHeater(self, vin, baseurl) -> dict | bool:
         """Get parking heater data."""
         await self.set_token(self._session_auth_brand)
         try:
@@ -1373,7 +1377,7 @@ class Connection:
             _LOGGER.warning(f'Failure during get request status: {error}')
             raise SeatException(f'Failure during get request status: {error}')"""
 
-    async def get_sec_token(self, spin, baseurl):
+    async def get_sec_token(self, spin, baseurl) -> str:
         """Get a security token, required for certain set functions."""
         data = {'spin': spin}
         url = eval(f"f'{API_SECTOKEN}'")
@@ -1383,7 +1387,7 @@ class Connection:
         else:
             raise SeatException('Did not receive a valid security token. Maybewrong SPIN?' )
 
-    async def _setViaAPI(self, endpoint, **data):
+    async def _setViaAPI(self, endpoint, **data) -> dict | bool:
         """Data call to API to set a value or to start an action."""
         await self.set_token(self._session_auth_brand)
         try:
@@ -1416,7 +1420,7 @@ class Connection:
             raise
         return False
 
-    async def _setViaPUTtoAPI(self, endpoint, **data):
+    async def _setViaPUTtoAPI(self, endpoint, **data) -> dict | bool:
         """PUT call to API to set a value or to start an action."""
         await self.set_token(self._session_auth_brand)
         try:
@@ -1449,7 +1453,7 @@ class Connection:
             raise
         return False
 
-    async def subscribe(self, vin, credentials):
+    async def subscribe(self, vin, credentials) -> dict | bool:
         url = f'{APP_URI}/v2/subscriptions'
         deviceId = credentials.get('gcm',{}).get('app_id','')
         token = credentials.get('fcm',{}).get('registration',{}).get('token','')
@@ -1498,7 +1502,7 @@ class Connection:
             raise
         return False
 
-    async def setCharger(self, vin, baseurl, mode, data):
+    async def setCharger(self, vin, baseurl, mode, data) -> dict | bool:
         """Start/Stop charger."""
         if mode in {'start', 'stop'}:
             capability='charging'
@@ -1509,7 +1513,7 @@ class Connection:
             _LOGGER.error(f'Not yet implemented. Mode: {mode}. Command ignored')
             raise
 
-    async def setClimater(self, vin, baseurl, mode, data, spin):
+    async def setClimater(self, vin, baseurl, mode, data, spin) -> dict | bool:
         """Execute climatisation actions."""
         try:
             # Only get security token if auxiliary heater is to be started
@@ -1538,7 +1542,7 @@ class Connection:
             raise
         return False
 
-    async def setDeparturetimer(self, vin, baseurl, data, spin):
+    async def setDeparturetimer(self, vin, baseurl, data, spin) -> dict | bool:
         """Set departure timers."""
         try:
             url= eval(f"f'{API_DEPARTURE_TIMERS}'")
@@ -1550,7 +1554,7 @@ class Connection:
             raise
         return False
 
-    async def setDepartureprofile(self, vin, baseurl, data, spin):
+    async def setDepartureprofile(self, vin, baseurl, data, spin) -> dict | bool:
         """Set departure profiles."""
         try:
             url= eval(f"f'{API_DEPARTURE_PROFILES}'")
@@ -1597,11 +1601,11 @@ class Connection:
             raise
         return False
 
-    async def setHonkAndFlash(self, vin, baseurl, data):
+    async def setHonkAndFlash(self, vin, baseurl, data) -> dict | bool:
         """Execute honk and flash actions."""
         return await self._setViaAPI(eval(f"f'{API_HONK_AND_FLASH}'"), json = data)
 
-    async def setLock(self, vin, baseurl, action, data, spin):
+    async def setLock(self, vin, baseurl, action, spin) -> dict | bool:
         """Remote lock and unlock actions."""
         try:
             # Fetch security token 
@@ -1619,7 +1623,7 @@ class Connection:
             raise
         return False
 
-    async def setPreHeater(self, vin, baseurl, data, spin):
+    async def setPreHeater(self, vin, baseurl, data, spin) -> dict | bool:
         """Petrol/diesel parking heater actions."""
         try:
             # Fetch security token 
@@ -1637,12 +1641,12 @@ class Connection:
             raise
         return False
 
-    async def setRefresh(self, vin, baseurl):
+    async def setRefresh(self, vin, baseurl) -> dict | bool:
         """"Force vehicle data update."""
         return await self._setViaAPI(eval(f"f'{API_REFRESH}'"))
 
  #### Token handling ####
-    async def validate_token(self, token):
+    async def validate_token(self, token) -> datetime:
         """Function to validate a single token."""
         try:
             now = datetime.now()
@@ -1665,12 +1669,12 @@ class Connection:
                 return expires
             else:
                 _LOGGER.debug(f'Token expired at {expires.strftime("%Y-%m-%d %H:%M:%S")}')
-                return False
+                return datetime.min # Return value datetime.min means that the token is not valid
         except Exception as e:
             _LOGGER.info(f'Token validation failed, {e}')
-        return False
+        return datetime.min # Return value datetime.min means that the token is not valid
 
-    async def verify_token(self, token):
+    async def verify_token(self, token) -> bool:
         """Function to verify a single token."""
         try:
             req = None
@@ -1696,7 +1700,9 @@ class Connection:
                 if aud == CLIENT_LIST[client].get('CLIENT_ID', ''):
                     req = await self._session.get(url = AUTH_TOKENKEYS)
                     break
-
+            if req == None:
+                return False
+            
             # Fetch key list
             keys = await req.json()
             pubkeys = {}
@@ -1721,9 +1727,9 @@ class Connection:
             return False
         except Exception as error:
             _LOGGER.debug(f'Failed to verify {aud} token, error: {error}')
-            return error
+        return False
 
-    async def refresh_token(self, client):
+    async def refresh_token(self, client) -> bool:
         """Function to refresh tokens for a client."""
         try:
             # Refresh API tokens
@@ -1782,7 +1788,7 @@ class Connection:
             _LOGGER.warning(f'Could not refresh tokens: {error}')
         return False
 
-    async def set_token(self, client):
+    async def set_token(self, client) -> bool:
         """Switch between tokens."""
         # Lock to prevent multiple instances updating tokens simultaneously
         async with self._lock:
@@ -1807,7 +1813,7 @@ class Connection:
             try:
                 # Validate access token for client, refresh if validation fails
                 valid = await self.validate_token(self._session_tokens.get(client, {}).get('access_token', ''))
-                if not valid:
+                if valid == datetime.min:
                     _LOGGER.debug(f'Tokens for "{client}" are invalid')
                     # Try to refresh tokens for client
                     if await self.refresh_token(client) is not True:
@@ -1817,8 +1823,9 @@ class Connection:
                         pass
                 else:
                     try:
-                        dt = datetime.fromtimestamp(valid)
-                        _LOGGER.debug(f'Access token for "{client}" is valid until {dt.strftime("%Y-%m-%d %H:%M:%S")}')
+                        #dt = datetime.fromtimestamp(valid)
+                        #_LOGGER.debug(f'Access token for "{client}" is valid until {dt.strftime("%Y-%m-%d %H:%M:%S")}')
+                        _LOGGER.debug(f'Access token for "{client}" is valid until {valid.strftime("%Y-%m-%d %H:%M:%S")}')
                     except:
                         pass
                 # Assign token to authorization header
@@ -1829,11 +1836,11 @@ class Connection:
 
  #### Class helpers ####
     @property
-    def vehicles(self):
+    def vehicles(self) -> list:
         """Return list of Vehicle objects."""
         return self._vehicles
 
-    def vehicle(self, vin):
+    def vehicle(self, vin) -> Any:
         """Return vehicle object for given vin."""
         return next(
             (
@@ -1843,20 +1850,20 @@ class Connection:
             ), None
         )
 
-    def hash_spin(self, challenge, spin):
+    def hash_spin(self, challenge, spin) -> str:
         """Convert SPIN and challenge to hash."""
         spinArray = bytearray.fromhex(spin);
         byteChallenge = bytearray.fromhex(challenge);
         spinArray.extend(byteChallenge)
         return hashlib.sha512(spinArray).hexdigest()
 
-    def addToAnonymisationDict(self, keyword, replacement):
+    def addToAnonymisationDict(self, keyword, replacement) -> None:
         self._anonymisationDict[keyword] = replacement
 
-    def addToAnonymisationKeys(self, keyword):
+    def addToAnonymisationKeys(self, keyword) -> None:
         self._anonymisationKeys.add(keyword)
 
-    def anonymise(self, inObj):
+    def anonymise(self, inObj) -> Any:
         if self._session_anonymise:
             if isinstance(inObj, str):
                 for key, value in self._anonymisationDict.items():
@@ -1872,9 +1879,9 @@ class Connection:
                     inObj[i]= self.anonymise(inObj[i])
         return inObj
 
-async def main():
+#async def main():
     """Main method."""
-    if '-v' in argv:
+    """if '-v' in argv:
         logging.basicConfig(level=logging.INFO)
     elif '-vv' in argv:
         logging.basicConfig(level=logging.DEBUG)
@@ -1895,3 +1902,4 @@ async def main():
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
+"""
