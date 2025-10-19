@@ -90,3 +90,14 @@ def camel2slug(s) -> str:
     'foo_bar'
     """
     return re.sub("([A-Z])", "_\\1", s).lower().lstrip("_")
+
+
+def datetime2string(data):
+    if isinstance(data, dict):
+        return {key: datetime2string(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [datetime2string(item) for item in data]
+    elif isinstance(data, datetime):
+        return data.strftime("%Y-%m-%dT%H:%M:%SZ")
+    else:
+        return data
