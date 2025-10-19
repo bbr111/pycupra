@@ -355,7 +355,7 @@ class Connection:
                             _LOGGER.warning(f'Login failed: {errorTxt}')
                         raise SeatLoginFailedException(errorTxt)
                     if 'terms-and-conditions' in location:
-                        raise SeatEULAException('The terms and conditions must be accepted first at your local SEAT/Cupra site, e.g. "https://cupraofficial.se/"')
+                        raise SeatEULAException('The terms and conditions must be accepted first at your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/"')
                     if 'user_id' in location: # Get the user_id which is needed for some later requests
                         self._user_id=parse_qs(urlparse(location).query).get('user_id', [''])[0]
                         self.addToAnonymisationDict(self._user_id,'[USER_ID_ANONYMISED]')
