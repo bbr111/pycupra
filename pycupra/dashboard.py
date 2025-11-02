@@ -992,8 +992,8 @@ class DepartureTimer1(Switch):
 
     @property
     def state(self):
-        if self.vehicle.departure3 != None:
-            status = self.vehicle.departure3.get("enabled", "")
+        if self.vehicle.departure1 != None:
+            status = self.vehicle.departure1.get("enabled", "")
             if status:
                 return True
         #else:
