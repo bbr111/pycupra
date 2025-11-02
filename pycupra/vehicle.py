@@ -57,6 +57,7 @@ class Vehicle:
         self.updateCallback = None
 
         self._requests = {
+            'climatisationtimer': {'status': '', 'timestamp': DATEZERO},
             'departuretimer': {'status': '', 'timestamp': DATEZERO},
             'departureprofile': {'status': '', 'timestamp': DATEZERO},
             'batterycharge': {'status': '', 'timestamp': DATEZERO},
@@ -86,11 +87,16 @@ class Vehicle:
             'departureProfiles': {'active': False, 'reason': 'not supported', 'supportsSingleTimer': False},
             'transactionHistoryLockUnlock': {'active': False, 'reason': 'not supported'},
             'transactionHistoryHonkFlash': {'active': False, 'reason': 'not supported'},
+            'batteryChargingCare': {'active': False, 'reason': 'not supported'},
+            'climatisationTimers': {'active': False, 'reason': 'not supported'},
+            'ignition': {'active': False, 'reason': 'not supported'},
+            'vehicleLights': {'active': False, 'reason': 'not supported'},
         }
 
         self._last_full_update = datetime.now(tz=None) - timedelta(seconds=1200)
         # Timestamps for the last API calls
         self._last_get_statusreport = datetime.now(tz=None) - timedelta(seconds=600)
+        self._last_get_climatisation_timers = datetime.now(tz=None) - timedelta(seconds=600)
         self._last_get_departure_timers = datetime.now(tz=None) - timedelta(seconds=600)
         self._last_get_departure_profiles = datetime.now(tz=None) - timedelta(seconds=600)
         self._last_get_charger = datetime.now(tz=None) - timedelta(seconds=600)
@@ -131,6 +137,10 @@ class Vehicle:
                             data['supportsVehiclePositionedInProfileID']=True
                         if capa['parameters'].get('supportsTimerClimatisation',False)==True or capa['parameters'].get('supportsTimerClimatisation',False)=='true':
                             data['supportsTimerClimatisation']=True
+                        if capa['parameters'].get('supportsStartParallelClimatisationWindowHeating',False)==True or capa['parameters'].get('supportsStartParallelClimatisationWindowHeating',False)=='true':
+                            data['supportsStartParallelClimatisationWindowHeating']=True
+                        #if capa['parameters'].get('supportsStartParallelClimatisationWindowHeating',False)==True or capa['parameters'].get('supportsStartParallelClimatisationWindowHeating',False)=='true':
+                        #    data['supportsStartParallelClimatisationWindowHeating']=True
                     self._relevantCapabilties[id].update(data)
         else:
             _LOGGER.warning(f"No capabilities information stored for vehicle with VIN {self.vin}")
@@ -239,6 +249,7 @@ class Vehicle:
                     self.get_vehicleHealthWarnings(),
                     self.get_departure_timers(),
                     self.get_departure_profiles(),
+                    self.get_climatisation_timers(),
                     #self.get_modelimageurl(), #commented out, because getting the images discover() should be sufficient
                     return_exceptions=True
                 )
@@ -374,13 +385,26 @@ class Vehicle:
     async def get_charger(self) -> bool:
         """Fetch charger data if function is enabled."""
         if self._relevantCapabilties.get('charging', {}).get('active', False):
-            data = await self._connection.getCharger(self.vin, self._apibase, deepcopy(self.attrs.get('charging',{})))
+            data = await self._connection.getCharger(self.vin, self._apibase, deepcopy(self.attrs.get('charging',{})), 
+                    self._relevantCapabilties['chargingProfiles'].get('active', False)) #, self._relevantCapabilties['batteryChargingCare'].get('active', False))
             if data:
                 self._states.update(data)
                 self._last_get_charger = datetime.now(tz=None)
                 return True
             else:
                 _LOGGER.debug('Could not fetch charger data')
+        return False
+
+    async def get_climatisation_timers(self) -> bool:
+        """Fetch climatisation timer data if function is enabled."""
+        if self._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
+            data = await self._connection.getClimatisationtimer(self.vin, self._apibase)
+            if data:
+                self._states.update(data)
+                self._last_get_climatisation_timers = datetime.now(tz=None)
+                return True
+            else:
+                _LOGGER.debug('Could not fetch climatisation timers')
         return False
 
     async def get_departure_timers(self) -> bool:
@@ -478,6 +502,12 @@ class Vehicle:
                             _LOGGER.error(f'Can not set target soc, because currently no charging settings are present.')
                             raise SeatInvalidRequestException(f'Set target soc not possible. Charging settings not present.')
                         data['targetSoc'] = int(value)
+                        action = 'settings'
+                        if self._properties.get('platform','')=='MOD4': # I assume, that for platform=MOD4 the call is different
+                            data={}
+                            data['targetSocPercentage'] = int(value)
+                            action = 'update-settings'
+
                     else: 
                         _LOGGER.warning(f'Can not set target soc, because vehicle does not support this feature.')
                         return False
@@ -488,7 +518,25 @@ class Vehicle:
             else:
                 _LOGGER.error(f'Data type passed is invalid.')
                 raise SeatInvalidRequestException(f'Invalid data type.')
-            return await self.set_charger('settings', data)
+            return await self.set_charger(action, data)
+        else:
+            _LOGGER.error('No charger support.')
+            raise SeatInvalidRequestException('No charger support.')
+
+    async def set_battery_care(self, value) -> bool:
+        """Set battery care setting"""
+        if self.is_charging_supported:
+            data={}
+            if isinstance(value, bool):
+                if self._relevantCapabilties.get('charging', {}).get('active', False) and self._relevantCapabilties.get('batteryChargingCare', {}).get('active', False):
+                    data['enabled'] = value
+                else: 
+                    _LOGGER.warning(f'Can not change battery care setting, because vehicle does not support this feature.')
+                    return False
+            else:
+                _LOGGER.error(f'Data type passed is invalid.')
+                raise SeatInvalidRequestException(f'Invalid data type.')
+            return await self.set_charger('update-battery-care', data)
         else:
             _LOGGER.error('No charger support.')
             raise SeatInvalidRequestException('No charger support.')
@@ -511,6 +559,8 @@ class Vehicle:
             elif action in ['stop', 'Stop', 'Off', 'off']:
                 mode='stop'
             elif action=='settings':
+                mode=action
+            elif action=='update-settings' or action=='update-battery-care':
                 mode=action
             else:
                 _LOGGER.error(f'Invalid charger action: {action}. Must be either start, stop or setSettings')
@@ -552,6 +602,12 @@ class Vehicle:
                         if data.get('maxChargeCurrentAc','') ==  self.charge_max_ampere: # In case 'maximum', 'reduced'
                             actionSuccessful = True
                         if data.get('maxChargeCurrentAcInAmperes',0) ==  self.charge_max_ampere: # In case of a numerical value for charge current
+                            actionSuccessful = True
+                    elif mode == 'update-settings':
+                        if data.get('targetSocPercentage',0) ==  self.target_soc: # In case targetSoc is changed
+                            actionSuccessful = True
+                    elif mode == 'update-battery-care':
+                        if data.get('enabled','') ==  self.charging_battery_care: # In case charging_battery_care is changed
                             actionSuccessful = True
                     else:
                         _LOGGER.error(f'Missing code in vehicle._set_charger() for mode {mode}')
@@ -742,9 +798,9 @@ class Vehicle:
                 }
             else:
                 startDateTime = datetime.fromisoformat(schedule.get('date',"2025-01-01")+'T'+schedule.get('time',"00:00"))
-                _LOGGER.info(f'startDateTime={datetime2string(startDateTime)}')
+                _LOGGER.info(f'startDateTime={startDateTime.isoformat()}')
                 data['singleTimer']= {
-                    "startDateTime": datetime2string(startDateTime),
+                    "startDateTimeLocal": startDateTime.isoformat(),
                     #"preferredChargingTimes": preferedChargingTimes
                     }
             data["preferredChargingTimes"]= preferedChargingTimes
@@ -1037,24 +1093,26 @@ class Vehicle:
             _LOGGER.warning(f'Failed to execute send destination request - {error}')
         raise SeatException('Failed to send destination to vehicle')
 
-   # Climatisation electric/auxiliary/windows (CLIMATISATION)
-    async def set_climatisation_temp(self, temperature=20) -> bool:
-        """Set climatisation target temp."""
-        if self.is_electric_climatisation_supported or self.is_auxiliary_climatisation_supported:
-            if 16 <= float(temperature) <= 30:
-                data = {
-                    'climatisationWithoutExternalPower': self.climatisation_without_external_power, 
-                    'targetTemperature':    temperature, 
-                    'targetTemperatureUnit':    'celsius'
-                    }
-                mode = 'settings'
-            else:
-                _LOGGER.error(f'Set climatisation target temp to {temperature} is not supported.')
-                raise SeatInvalidRequestException(f'Set climatisation target temp to {temperature} is not supported.')
-            return await self._set_climater(mode, data)
-        else:
-            _LOGGER.error('No climatisation support.')
-            raise SeatInvalidRequestException('No climatisation support.')
+    # Climatisation electric/auxiliary/windows (CLIMATISATION)
+
+    # Obsolete now. Can be deleted in the future
+    #async def set_climatisation_temp(self, temperature=20) -> bool:
+    #    """Set climatisation target temp."""
+    #    if self.is_electric_climatisation_supported or self.is_auxiliary_climatisation_supported:
+    #        if 16 <= float(temperature) <= 30:
+    #            data = {
+    #                'climatisationWithoutExternalPower': self.climatisation_without_external_power, 
+    #                'targetTemperature':    temperature, 
+    #                'targetTemperatureUnit':    'celsius'
+    #                }
+    #            mode = 'settings'
+    #        else:
+    #            _LOGGER.error(f'Set climatisation target temp to {temperature} is not supported.')
+    #            raise SeatInvalidRequestException(f'Set climatisation target temp to {temperature} is not supported.')
+    #        return await self._set_climater(mode, data)
+    #    else:
+    #        _LOGGER.error('No climatisation support.')
+    #        raise SeatInvalidRequestException('No climatisation support.')
 
     async def set_window_heating(self, action = 'stop') -> bool:
         """Turn on/off window heater."""
@@ -1069,23 +1127,66 @@ class Vehicle:
             _LOGGER.error('No climatisation support.')
             raise SeatInvalidRequestException('No climatisation support.')
 
-    async def set_battery_climatisation(self, mode = False) -> bool:
-        """Turn on/off electric climatisation from battery."""
-        if self.is_electric_climatisation_supported:
-            if mode in [True, False]:
-                data = {
-                    'climatisationWithoutExternalPower': mode, 
-                    'targetTemperature':    self.climatisation_target_temperature, #keep the current target temperature
-                    'targetTemperatureUnit':    'celsius'
-                    }
+    # Obsolete now. Can be deleted in the future
+    #async def set_battery_climatisation(self, mode = False) -> bool: 
+    #    """Turn on/off electric climatisation from battery."""
+    #    if self.is_electric_climatisation_supported:
+    #        if mode in [True, False]:
+    #            data = {
+    #                'climatisationWithoutExternalPower': mode, 
+    #                'targetTemperature':    self.climatisation_target_temperature, #keep the current target temperature
+    #                'targetTemperatureUnit':    'celsius'
+    #                }
+    #            mode = 'settings'
+    #        else:
+    #            _LOGGER.error(f'Set climatisation without external power to "{mode}" is not supported.')
+    #            raise SeatInvalidRequestException(f'Set climatisation without external power to "{mode}" is not supported.')
+    #        return await self._set_climater(mode, data)
+    #    else:
+    #        _LOGGER.error('No climatisation support.')
+    #        raise SeatInvalidRequestException('No climatisation support.')
+
+    async def set_climatisation_one_setting(self, settingName, value = False) -> bool:
+        """Set one attribute in the climatisation settings to a new value."""
+        data = deepcopy(self.attrs.get('climater', {}).get('settings',{}))
+        if settingName in data:
+            if value!='':
+                if settingName=='targetTemperatureInCelsius':
+                    if float(value) < 16.0 or float(value) > 30.0:
+                        _LOGGER.error(f'The value {value} is not a valid temperature in °C for climatisation.')
+                        raise SeatInvalidRequestException(f'Setting temperature to {value} °C is not supported.')
+                if settingName=='targetTemperatureInFahrenheit':
+                    if float(value) < 61.0 or float(value) > 86.0:
+                        _LOGGER.error(f'The value {value} is not a valid temperature in F for climatisation.')
+                        raise SeatInvalidRequestException(f'Setting temperature to {value} F is not supported.')
+                data[settingName]= value
+                if settingName=='targetTemperatureInFahrenheit':
+                    data['unitInCar'] = 'fahrenheit'
+                if settingName=='targetTemperatureInCelsius':
+                    data['unitInCar'] = 'celsius'
+
                 mode = 'settings'
+                if data.get('unitInCar','')=='fahrenheit':
+                    data['targetTemperatureUnit']= 'fahrenheit'
+                    data['targetTemperature'] = data.get('targetTemperatureInFahrenheit',72.0)
+                else:
+                    data['targetTemperatureUnit']= 'celsius'
+                    data['targetTemperature'] = data.get('targetTemperatureInCelsius',20.0)
+                if data.get('carCapturedTimestamp','')!='':
+                    data.pop('carCapturedTimestamp')
+                if data.get('targetTemperatureInCelsius','')!='':
+                    data.pop('targetTemperatureInCelsius')
+                if data.get('targetTemperatureInFahrenheit','')!='':
+                    data.pop('targetTemperatureInFahrenheit')
+                if data.get('unitInCar','')!='':
+                    data.pop('unitInCar')
             else:
                 _LOGGER.error(f'Set climatisation without external power to "{mode}" is not supported.')
                 raise SeatInvalidRequestException(f'Set climatisation without external power to "{mode}" is not supported.')
             return await self._set_climater(mode, data)
         else:
-            _LOGGER.error('No climatisation support.')
-            raise SeatInvalidRequestException('No climatisation support.')
+            _LOGGER.error(f'Could not find climatisation setting {settingName}.')
+            raise SeatInvalidRequestException(f'Cannot change climatisation setting {settingName}.')
 
     async def set_climatisation(self, mode = 'off', temp = None, hvpower = None, spin = None) -> bool:
         """Turn on/off climatisation with electric/auxiliary heater."""
@@ -1201,6 +1302,182 @@ class Vehicle:
             _LOGGER.warning(f'Failed to execute climatisation request - {error}')
             self._requests['climatisation'] = {'status': 'Exception'}
         raise SeatException('Climatisation action failed')
+
+    async def set_climatisation_timer_active(self, id=1, action='off') -> bool:
+        """ Activate/deactivate climatisation timers. """
+        data: dict[str, Any] = {}
+        supported = "is_climatisationTimer" + str(id) + "_supported"
+        if getattr(self, supported) is not True:
+            raise SeatConfigException(f'This vehicle does not support climatisation timer id {id}.')
+        if self._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
+            data= deepcopy(self.attrs.get('climatisationTimers'))
+            if len(data.get('timers', []))<1:
+                raise SeatInvalidRequestException(f'No timers found in climatisationTimers: {data}.')
+            idFound=False
+            data.pop('carCapturedTimestamp')
+            data.pop('timeInCar')
+            for e in range(len(data.get('timers', []))):
+                if data['timers'][e].get('id',-1)==id:
+                    if action in ['on', 'off']:
+                        if action=='on':
+                            enabled=True
+                        else:
+                            enabled=False
+                        data['timers'][e]['enabled'] = enabled
+                        idFound=True
+                        _LOGGER.debug(f'Changing climatisation timer {id} to {action}.')
+                    else:
+                        raise SeatInvalidRequestException(f'Profile action "{action}" is not supported.')
+            if idFound:
+                converted_data = datetime2string(data) # datetime to string
+                return await self._set_climatisation_timers(converted_data)
+            else:
+                raise SeatInvalidRequestException(f'Climatisation timer id {id} not found.')
+        else:
+            raise SeatInvalidRequestException('Climatisation timers are not supported.')
+
+    async def set_climatisation_timer_schedule(self, id, schedule={}) -> bool:
+        """ Set climatisation timer schedule. """
+        data = {}
+        # Validate required user inputs
+        supported = "is_climatisationTimer" + str(id) + "_supported"
+        if getattr(self, supported) is not True:
+            raise SeatConfigException(f'This vehicle does not support climatisation timer id {id}.')
+        if not schedule:
+            raise SeatInvalidRequestException('A schedule must be set.')
+        if not isinstance(schedule.get('enabled', ''), bool):
+            raise SeatInvalidRequestException('The enabled variable must be set to True or False.')
+        if not isinstance(schedule.get('recurring', ''), bool):
+            raise SeatInvalidRequestException('The recurring variable must be set to True or False.')
+        if not re.match('^[0-9]{2}:[0-9]{2}$', schedule.get('time', '')):
+            raise SeatInvalidRequestException('The time for the timer must be set in 24h format HH:MM.')
+
+        # Validate optional inputs
+        if schedule.get('recurring', False):
+            if not re.match('^[yn]{7}$', schedule.get('days', '')):
+                raise SeatInvalidRequestException('For recurring schedules the days variable must be set to y/n mask (mon-sun with only wed enabled): nnynnnn.')
+        elif not schedule.get('recurring'):
+            if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', schedule.get('date', '')):
+                raise SeatInvalidRequestException('For single climatisation timer schedule the date variable must be set to YYYY-mm-dd.')
+
+        if self._relevantCapabilties.get('climatisation', {}).get('active', False):
+            newSchedule = {}
+            # Prepare data and execute
+            newSchedule['id'] = id
+            # Converting schedule to data map
+            if schedule.get("enabled",False):
+                newSchedule['enabled']=True
+            else:
+                newSchedule['enabled']=False
+            if schedule.get("recurring",False):
+                newSchedule['recurringTimer']= {
+                    "startTime": schedule.get('time',"00:00"),
+                    "recurringOn":{""
+                        "mondays":(schedule.get('days',"nnnnnnn")[0]=='y'),
+                        "tuesdays":(schedule.get('days',"nnnnnnn")[1]=='y'),
+                        "wednesdays":(schedule.get('days',"nnnnnnn")[2]=='y'),
+                        "thursdays":(schedule.get('days',"nnnnnnn")[3]=='y'),
+                        "fridays":(schedule.get('days',"nnnnnnn")[4]=='y'),
+                        "saturdays":(schedule.get('days',"nnnnnnn")[5]=='y'),
+                        "sundays":(schedule.get('days',"nnnnnnn")[6]=='y'),
+                    }
+                }
+            else:
+                if self._relevantCapabilties.get('departureProfiles', {}).get('supportsSingleTimer', False):
+                    startDateTime = datetime.fromisoformat(schedule.get('date',"2025-01-01")+'T'+schedule.get('time',"00:00"))
+                    _LOGGER.info(f'startDateTime={datetime2string(startDateTime)}')
+                    newSchedule['singleTimer']= {
+                        "startDateTime": datetime2string(startDateTime),
+                        }
+                else:
+                    raise SeatInvalidRequestException('Vehicle does not support single timer.')
+
+            # Now we have to substitute the current climatisation timer schedule with the given id by the new one
+            data= deepcopy(self.attrs.get('climatisationTimers'))
+            if len(data.get('timers', []))<1:
+                raise SeatInvalidRequestException(f'No timers found in climatisation timers: {data}.')
+            data.pop('carCapturedTimestamp')
+            data.pop('timeInCar')
+            idFound=False
+            for e in range(len(data.get('timers', []))):
+                if data['timers'][e].get('id',-1)==id:
+                    data['timers'][e] = newSchedule
+                    idFound=True
+            if idFound:
+                converted_data = datetime2string(data) # datetime to string
+                return await self._set_climatisation_timers(converted_data)
+            raise SeatInvalidRequestException(f'Climatisation timer id {id} not found in {data.get('timers',[])}.')
+        else:
+            _LOGGER.info('Climatisation timer are not supported.')
+            raise SeatInvalidRequestException('Climatisation are not supported.')
+
+    async def _set_climatisation_timers(self, data=None) -> bool:
+        """ Set climatisation timers. """
+        if not self._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
+            raise SeatInvalidRequestException('Climatisation timers are not supported.')
+        if self._requests['climatisationtimer'].get('id', False):
+            timestamp = self._requests.get('climatisationtimer', {}).get('timestamp', datetime.now())
+            expired = datetime.now() - timedelta(minutes=1)
+            if expired > timestamp:
+                self._requests.get('climatisationtimer', {}).pop('id')
+            else:
+                raise SeatRequestInProgressException('Scheduling of climatisation timer is already in progress')
+
+        try:
+            self._requests['latest'] = 'Climatisationtimer'
+            response = await self._connection.setClimatisationtimer(self.vin, self._apibase, data, spin=False)
+            if not response:
+                self._requests['climatisationtimer'] = {'status': 'Failed'}
+                _LOGGER.error('Failed to execute climatisation timer request')
+                raise SeatException('Failed to execute climatisation timer request')
+            else:
+                self._requests['remaining'] = response.get('rate_limit_remaining', -1)
+                self._requests['climatisationtimer'] = {
+                    'timestamp': datetime.now(),
+                    'status': response.get('state', 'Unknown'),
+                    'id': response.get('id', 0),
+                }
+                # if firebaseStatus is FIREBASE_STATUS_ACTIVATED, the request is assumed successful. Waiting for push notification before rereading status
+                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
+                    _LOGGER.debug('POST request for change of climatisation timers assumed successful. Waiting for push notification')
+                    return True
+                # Update the climatisation timers data and check, if they have changed as expected
+                retry = 0
+                actionSuccessful = False
+                while not actionSuccessful and retry < 2:
+                    await asyncio.sleep(15)
+                    await self.get_climatisation_timers()
+                    if True:
+                        _LOGGER.debug('Checking if new climatisation timer is as expected:')
+                        timerData = data.get('timers',[])[0]
+                        timerDataId = timerData.get('id',False)
+                        timerDataCopy = deepcopy(timerData)
+                        timerDataCopy['enabled']=True
+                        if timerDataId:
+                            newTimers = self.attrs.get('climatisationTimers',{}).get('timers',[])
+                            for newTimer in newTimers:
+                                if newTimer.get('id',-1)==timerDataId:
+                                    _LOGGER.debug(f'Value of timer sent:{timerData}')
+                                    _LOGGER.debug(f'Value of timer read:{newTimer}')
+                                    if timerData==newTimer: 
+                                        actionSuccessful=True
+                                    elif timerDataCopy==newTimer: 
+                                        _LOGGER.debug('Data written and data read are the same, but the timer is activated.')
+                                        actionSuccessful=True
+                                    break
+                    retry = retry +1
+                if True: #actionSuccessful:
+                    #_LOGGER.debug('POST request for climatisation timers successful. New status as expected.')
+                    self._requests.get('climatisationtimer', {}).pop('id')
+                    return True
+                _LOGGER.error('Response to POST request seemed successful but the climatisation timers status did not change as expected.')
+                return False
+        except (SeatInvalidRequestException, SeatException):
+            raise
+        except Exception as error:
+            _LOGGER.warning(f'Failed to execute climatisation timer request - {error}')
+            self._requests['climatisationtimer'] = {'status': 'Exception'}
+        raise SeatException('Failed to set climatisation timer schedule')
 
     # Parking heater heating/ventilation (RS)
     async def set_pheater(self, mode, spin) -> bool:
@@ -1537,6 +1814,24 @@ class Vehicle:
         else:
             return False
 
+    # Engine
+    @property
+    def engine(self) -> bool:
+        """Return true if engine is on"""
+        response = self.attrs.get('status').get('engine', 0)
+        if response == 'on':
+            return True
+        else:
+            return False
+
+    @property
+    def is_engine_supported(self) -> bool:
+        """Return true if engine is supported"""
+        if self.attrs.get('status', False):
+            if 'engine' in self.attrs.get('status'):
+                return True
+        return False
+
     # Lights
     @property
     def parking_light(self) -> bool:
@@ -1842,32 +2137,62 @@ class Vehicle:
     def charging_power(self) -> int:
         """Return charging power in watts."""
         if self.attrs.get('charging', False):
-            return int(self.attrs.get('charging', {}).get('chargingPowerInWatts', 0))
+            return self.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('chargedPowerInKw', 0.0)
+            #return int(self.attrs.get('charging', {}).get('chargingPowerInWatts', 0))  # From the old seatconnect, presumably not working
         else:
-            return 0
+            return 0.0
 
     @property
     def is_charging_power_supported(self) -> bool:
         """Return true if charging power is supported."""
+        #if self.attrs.get('charging', False): # From the old seatconnect, presumably not working
+        #    if self.attrs.get('charging', {}).get('chargingPowerInWatts', False) is not False:
+        #        return True
         if self.attrs.get('charging', False):
-            if self.attrs.get('charging', {}).get('chargingPowerInWatts', False) is not False:
-                return True
+            if 'status' in self.attrs.get('charging'):
+                if 'charging' in self.attrs.get('charging')['status']:
+                    if 'chargedPowerInKw' in self.attrs.get('charging')['status']['charging']:
+                        return True
+        return False
+
+    @property
+    def charging_battery_care(self) -> bool:
+        """Return battery care setting."""
+        if self.attrs.get('charging', False):
+            return self.attrs.get('charging',{}).get('info',{}).get('chargingCareSettings',{}).get('batteryCareMode', False)
+        return False
+
+    @property
+    def is_charging_battery_care_supported(self) -> bool:
+        """Return true if battery care setting is supported."""
+        if self.attrs.get('charging', False):
+            if 'info' in self.attrs.get('charging', {}):
+                if 'settings' in self.attrs.get('charging')['info']:
+                    if 'chargingCareSettings' in self.attrs.get('charging', {})['info']:
+                        if 'batteryCareMode' in self.attrs.get('charging', {})['info']['chargingCareSettings']:
+                            return True
         return False
 
     @property
     def charge_rate(self) -> int:
         """Return charge rate in km per h."""
         if self.attrs.get('charging', False):
-            return int(self.attrs.get('charging', {}).get('chargingRateInKilometersPerHour', 0))
+            return int(self.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('rateInKmph', 0))
+            #return int(self.attrs.get('charging', {}).get('chargingRateInKilometersPerHour', 0))
         else:
             return 0
 
     @property
     def is_charge_rate_supported(self) -> bool:
         """Return true if charge rate is supported."""
+        #if self.attrs.get('charging', False): # From the old seatconnect, presumably not working
+        #    if self.attrs.get('charging', {}).get('chargingRateInKilometersPerHour', False) is not False:
+        #        return True
         if self.attrs.get('charging', False):
-            if self.attrs.get('charging', {}).get('chargingRateInKilometersPerHour', False) is not False:
-                return True
+            if 'status' in self.attrs.get('charging'):
+                if 'charging' in self.attrs.get('charging')['status']:
+                    if 'rateInKmph' in self.attrs.get('charging')['status']['charging']:
+                        return True
         return False
 
     @property
@@ -2177,7 +2502,7 @@ class Vehicle:
     def climatisation_time_left(self):
         """Return time left for climatisation in hours:minutes."""
         if self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', False):
-            minutes = int(self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', 0))/60
+            minutes = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('remainingClimatisationTimeInMinutes', 0)
             try:
                 if not 0 <= minutes <= 65535:
                     return "00:00"
@@ -2189,10 +2514,66 @@ class Vehicle:
     @property
     def is_climatisation_time_left_supported(self) -> bool:
         """Return true if remainingTimeToReachTargetTemperatureInSeconds is supported."""
-        if self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', False):
+        if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('remainingClimatisationTimeInMinutes', False):
             return True
         return False
 
+    @property
+    def climatisation_zone_front_left(self):
+        """Return state of climatisation setting for zone front left."""
+        return self.attrs.get('climater').get('settings').get('zoneFrontLeftEnabled', False)
+
+    @property
+    def is_climatisation_zone_front_left_supported(self) -> bool:
+        """Return true if climatisation setting for zone front left is supported."""
+        if self.attrs.get('climater', False):
+            if 'settings' in self.attrs.get('climater', {}):
+                if 'zoneFrontLeftEnabled' in self.attrs.get('climater', {})['settings']:
+                    return True
+        return False
+
+    @property
+    def climatisation_zone_front_right(self):
+        """Return state of climatisation setting for zone front right."""
+        return self.attrs.get('climater').get('settings').get('zoneFrontRightEnabled', False)
+
+    @property
+    def is_climatisation_zone_front_right_supported(self) -> bool:
+        """Return true if climatisation setting for zone front right is supported."""
+        if self.attrs.get('climater', False):
+            if 'settings' in self.attrs.get('climater', {}):
+                if 'zoneFrontRightEnabled' in self.attrs.get('climater', {})['settings']:
+                    return True
+        return False
+
+
+    @property
+    def climatisation_at_unlock(self):
+        """Return state of climatisation setting for climatisation at unlock."""
+        return self.attrs.get('climater').get('settings').get('climatisationAtUnlock', False)
+
+    @property
+    def is_climatisation_at_unlock_supported(self) -> bool:
+        """Return true if climatisation setting for climatisation at unlock is supported."""
+        if self.attrs.get('climater', False):
+            if 'settings' in self.attrs.get('climater', {}):
+                if 'climatisationAtUnlock' in self.attrs.get('climater', {})['settings']:
+                    return True
+        return False
+
+    @property
+    def climatisation_window_heating_enabled(self):
+        """Return state of climatisation setting for window heating."""
+        return self.attrs.get('climater').get('settings').get('windowHeatingEnabled', False)
+
+    @property
+    def is_climatisation_window_heating_enabled_supported(self) -> bool:
+        """Return true if climatisation setting for window heating is supported."""
+        if self.attrs.get('climater', False):
+            if 'settings' in self.attrs.get('climater', {}):
+                if 'windowHeatingEnabled' in self.attrs.get('climater', {})['settings']:
+                    return True
+        return False
     @property
     def climatisation_without_external_power(self):
         """Return state of climatisation from battery power."""
@@ -2231,7 +2612,8 @@ class Vehicle:
         """Return climatisation attributes."""
         data = {
             'source': self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', ''),
-            'status': self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('climatisationState', '')
+            'status': self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('climatisationState', ''),
+            'windowHeatingStatus': self.attrs.get('climater', {}).get('status', {}).get('windowHeatingStatus', {}).get('windowHeatingStatus', '')
         }
         return data
 
@@ -2619,6 +3001,49 @@ class Vehicle:
             if 'trunk' in self.attrs.get('status', {}):
                 response = self.attrs.get('status')['trunk'].get('open', 0)
         return True if response != 0 else False
+
+    # Climatisation timers
+    @property
+    def climatisationTimer1(self):
+        """Return climatisation timer status and attributes."""
+        if self.attrs.get('climatisationTimers', False):
+            try:
+                data = {}
+                timerdata = self.attrs.get('climatisationTimers', {}).get('timers', [])
+                timer = timerdata[0]
+                data.update(timer)
+                return data
+            except:
+                pass
+        return None
+
+    @property
+    def is_climatisationTimer1_supported(self) -> bool:
+        """Return true if climatisation timer 1 is supported."""
+        if len(self.attrs.get('climatisationTimers', {}).get('timers', [])) >= 1:
+            return True
+        return False
+
+    @property
+    def climatisationTimer2(self):
+        """Return climatisation timer status and attributes."""
+        if self.attrs.get('climatisationTimers', False):
+            try:
+                data = {}
+                timerdata = self.attrs.get('climatisationTimers', {}).get('timers', [])
+                timer = timerdata[1]
+                data.update(timer)
+                return data
+            except:
+                pass
+        return None
+
+    @property
+    def is_climatisationTimer2_supported(self) -> bool:
+        """Return true if climatisation timer 2 is supported."""
+        if len(self.attrs.get('climatisationTimers', {}).get('timers', [])) >= 2:
+            return True
+        return False
 
     # Departure timers
     @property
@@ -3168,6 +3593,11 @@ class Vehicle:
         return timestamp.strftime("%Y-%m-%d %H:%M:%S")
 
     @property
+    def engine_action_status(self):
+        """Return latest status of engine request."""
+        return self._requests.get('engine', {}).get('status', 'None')
+
+    @property
     def refresh_data(self) -> bool:
         """Get state of data refresh"""
         #if self._requests.get('refresh', {}).get('id', False):
@@ -3417,6 +3847,14 @@ class Vehicle:
                 _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last update of status report was at {self._last_get_statusreport}. So no need to update.')
                 # Wait 2 seconds
                 await asyncio.sleep(2)
+        elif type in ('vehicle-lights-status-changed', 'vehicle-status-ignition-changed'): # vehicle light or engine was turned or off
+            if (self._last_get_statusreport < datetime.now(tz=None) - timedelta(seconds= 10)) or openRequest == requestId:
+                if self.updateCallback:
+                    await self.updateCallback(2)
+            else:
+                _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last update of status report was at {self._last_get_statusreport}. So no need to update.')
+                # Wait 2 seconds
+                await asyncio.sleep(2)
         elif type ==  'departure-times-updated': 
             if self._requests.get('departuretimer', {}).get('id', None):
                 openRequest= self._requests.get('departuretimer', {}).get('id', None)
@@ -3447,7 +3885,23 @@ class Vehicle:
                 _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last update of departure profiles was at {self._last_get_departure_profiles}. So no need to update.')
                 # Wait 5 seconds
                 await asyncio.sleep(5)
-        elif type in ('charging-status-changed', 'charging-started', 'charging-stopped', 'charging-settings-updated'):
+        elif type in  ('climatisation-timers-changed', 'climatisation-timers-updated'): 
+            if self._requests.get('climatisationtimer', {}).get('id', None):
+                openRequest= self._requests.get('climatisationtimer', {}).get('id', None)
+                if openRequest == requestId:
+                    _LOGGER.debug(f'The notification closes an open request initiated by PyCupra.')
+                    self._requests.get('climatisationtimer', {}).pop('id')
+            if (self._last_get_climatisation_timers < datetime.now(tz=None) - timedelta(seconds= 30)) or openRequest == requestId:
+                # Update the climatisation timers only if the last one is older than timedelta or if the notification belongs to an open request initiated by PyCupra
+                await self.get_climatisation_timers()
+                if self.updateCallback:
+                    await self.updateCallback(2)
+            else:
+                _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last update of climatisation timers was at {self._last_get_climatisation_timers}. So no need to update.')
+                # Wait 5 seconds
+                await asyncio.sleep(5)
+        elif type in ('charging-status-changed', 'charging-started', 'charging-stopped', 'charging-settings-updated', 'charging-charge-mode-changed', 'charging-settings-changed',
+                      'charging-event-status-started', 'charging-finished'):
             if self._requests.get('batterycharge', {}).get('id', None):
                 openRequest= self._requests.get('batterycharge', {}).get('id', None)
                 if openRequest == requestId:
@@ -3462,7 +3916,9 @@ class Vehicle:
                 _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last get_charger was at {self._last_get_charger}. So no need to update.')
                 # Wait 5 seconds
                 await asyncio.sleep(5)
-        elif type in ('climatisation-status-changed','climatisation-started', 'climatisation-stopped', 'climatisation-settings-updated', 'climatisation-error-fail'):
+        elif type in ('climatisation-status-changed','climatisation-started', 'climatisation-stopped', 'climatisation-settings-updated', 'climatisation-error-fail',
+                      'climatisation-settings-changed', 'climatisation-window-heating-started', 'climatisation-window-heating-stopped',
+                      'climatisation-window-heating-start-failed', 'climatisation-window-heating-stop-failed'):
             if self._requests.get('climatisation', {}).get('id', None):
                 openRequest= self._requests.get('climatisation', {}).get('id', None)
                 if openRequest == requestId:

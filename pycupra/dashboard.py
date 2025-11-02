@@ -643,11 +643,111 @@ class BatteryClimatisation(Switch):
         return self.vehicle.climatisation_without_external_power
 
     async def turn_on(self):
-        await self.vehicle.set_battery_climatisation(True)
+        #await self.vehicle.set_battery_climatisation(True) # will become obsolete
+        await self.vehicle.set_climatisation_one_setting('climatisationWithoutExternalPower',True)
         #await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.set_battery_climatisation(False)
+        #await self.vehicle.set_battery_climatisation(False) # will become obsolete
+        await self.vehicle.set_climatisation_one_setting('climatisationWithoutExternalPower',False)
+        #await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
+
+class ClimatisationSettingZoneFrontLeft(Switch):
+    def __init__(self):
+        super().__init__(attr="climatisation_zone_front_left", name="Climatisation setting zone front left", icon="mdi:car-seat-heater")
+
+    @property
+    def state(self):
+        return self.vehicle.climatisation_zone_front_left
+
+    async def turn_on(self):
+        await self.vehicle.set_climatisation_one_setting('zoneFrontLeftEnabled',True)
+        #await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_climatisation_one_setting('zoneFrontLeftEnabled',False)
+        #await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
+
+class ClimatisationSettingZoneFrontRight(Switch):
+    def __init__(self):
+        super().__init__(attr="climatisation_zone_front_right", name="Climatisation setting zone front right", icon="mdi:car-seat-heater")
+
+    @property
+    def state(self):
+        return self.vehicle.climatisation_zone_front_right
+
+    async def turn_on(self):
+        await self.vehicle.set_climatisation_one_setting('zoneFrontRightEnabled',True)
+        #await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_climatisation_one_setting('zoneFrontRightEnabled',False)
+        #await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
+
+
+class ClimatisationSettingAtUnlock(Switch):
+    def __init__(self):
+        super().__init__(attr="climatisation_at_unlock", name="Climatisation setting climatisation at unlock", icon="mdi:radiator")
+
+    @property
+    def state(self):
+        return self.vehicle.climatisation_at_unlock
+
+    async def turn_on(self):
+        await self.vehicle.set_climatisation_one_setting('climatisationAtUnlock',True)
+        #await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_climatisation_one_setting('climatisationAtUnlock',False)
+        #await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.climater_action_status)
+
+
+class ClimatisationSettingWindowHeatingEnabled(Switch):
+    def __init__(self):
+        super().__init__(attr="climatisation_window_heating_enabled", name="Climatisation setting window heating enabled", icon="mdi:car-defrost-rear")
+
+    @property
+    def state(self):
+        return self.vehicle.climatisation_window_heating_enabled
+
+    async def turn_on(self):
+        await self.vehicle.set_climatisation_one_setting('windowHeatingEnabled',True)
+        #await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_climatisation_one_setting('windowHeatingEnabled',False)
         #await self.vehicle.update()
 
     @property
@@ -767,6 +867,122 @@ class Warnings(Sensor):
             attrs['warnings'] = warningTextList
         return attrs
 
+"""class Engine(Switch):
+    def __init__(self):
+        super().__init__(attr="engine", name="Engine", icon="mdi:engine")
+
+    @property
+    def state(self):
+        return self.vehicle.engine
+
+    async def turn_on(self):
+        _LOGGER.exception(f'turn_on not defined for "{self.attr}"')
+        #await self.vehicle.set_engine('start')
+        #await self.vehicle.update() # hinterher auskommentieren
+
+    async def turn_off(self):
+        _LOGGER.exception(f'turn_off not defined for "{self.attr}"')
+        #await self.vehicle.set_engine('stop')
+        await self.vehicle.update() # hinterher auskommentieren
+
+    @property
+    def assumed_state(self):
+        return False
+
+
+    @property
+    def attributes(self):
+        return dict(last_result = self.vehicle.engine_action_status)
+"""
+class ChargingBatteryCare(Switch):
+    def __init__(self):
+        super().__init__(attr="charging_battery_care", name="Charging battery care", icon="mdi:battery-heart-variant")
+
+    @property
+    def state(self):
+        return self.vehicle.charging_battery_care
+
+    async def turn_on(self):
+        #_LOGGER.exception(f'turn_on not defined for "{self.attr}"')
+        await self.vehicle.set_battery_care(True)
+        #await self.vehicle.update() 
+
+    async def turn_off(self):
+        #_LOGGER.exception(f'turn_off not defined for "{self.attr}"')
+        await self.vehicle.set_battery_care(False)
+        #await self.vehicle.update() 
+
+    @property
+    def assumed_state(self):
+        return False
+
+
+    #@property
+    #def attributes(self):
+    #    return dict(last_result = self.vehicle.chargingBatteryCare_action_status)
+
+class ClimatisationTimer1(Switch):
+    def __init__(self):
+        super().__init__(attr="climatisationTimer1", name="Climatisation timer 1", icon="mdi:radiator")
+
+    def configurate(self, **config):
+        self.spin = config.get('spin', '')
+
+    @property
+    def state(self):
+        if self.vehicle.climatisationTimer1 != None:
+            status = self.vehicle.climatisationTimer1.get("enabled", "")
+            if status:
+                return True
+        return False
+
+    async def turn_on(self):
+        await self.vehicle.set_climatisationTimer_active(id=1, action="on")
+        #await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_climatisationTimer_active(id=1, action="off")
+        #await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(self.vehicle.climatisationTimer1)
+
+class ClimatisationTimer2(Switch):
+    def __init__(self):
+        super().__init__(attr="climatisationTimer2", name="Climatisation timer 2", icon="mdi:radiator")
+
+    def configurate(self, **config):
+        self.spin = config.get('spin', '')
+
+    @property
+    def state(self):
+        if self.vehicle.climatisationTimer2 != None:
+            status = self.vehicle.climatisationTimer2.get("enabled", "")
+            if status:
+                return True
+        return False
+
+    async def turn_on(self):
+        await self.vehicle.set_climatisationTimer_active(id=2, action="on")
+        #await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_climatisationTimer_active(id=2, action="off")
+        #await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(self.vehicle.climatisationTimer2)
+
 class DepartureTimer1(Switch):
     def __init__(self):
         super().__init__(attr="departure1", name="Departure timer 1", icon="mdi:radiator")
@@ -776,8 +992,8 @@ class DepartureTimer1(Switch):
 
     @property
     def state(self):
-        if self.vehicle.departure1 != None:
-            status = self.vehicle.departure1.get("enabled", "")
+        if self.vehicle.departure3 != None:
+            status = self.vehicle.departure3.get("enabled", "")
             if status:
                 return True
         #else:
@@ -1042,6 +1258,10 @@ def create_instruments():
         RequestUpdate(),
         WindowHeater(),
         BatteryClimatisation(),
+        ClimatisationSettingZoneFrontLeft(),
+        ClimatisationSettingZoneFrontRight(),
+        ClimatisationSettingAtUnlock(),
+        ClimatisationSettingWindowHeatingEnabled(),
         ElectricClimatisation(),
         AuxiliaryClimatisation(),
         PHeaterVentilation(),
@@ -1049,9 +1269,13 @@ def create_instruments():
         #ElectricClimatisationClimate(),
         #CombustionClimatisationClimate(),
         Charging(),
+        ChargingBatteryCare(),
         Warnings(),
         SlowCharge(),
         RequestResults(),
+        #Engine(),
+        ClimatisationTimer1(),
+        ClimatisationTimer2(),
         DepartureTimer1(),
         DepartureTimer2(),
         DepartureTimer3(),
@@ -1156,7 +1380,7 @@ def create_instruments():
             attr="charging_power",
             name="Charging power",
             icon="mdi:flash",
-            unit="W",
+            unit="kW",
             device_class="power"
         ),
         Sensor(
@@ -1396,6 +1620,12 @@ def create_instruments():
         #    name="Charging state",
         #    device_class="power"
         #),
+        BinarySensor(
+            attr="engine",
+            name="Engine Status",
+            device_class="running",
+            icon="mdi:engine"
+        ),
         BinarySensor(
             attr="parking_light",
             name="Parking light",

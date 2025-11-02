@@ -75,11 +75,13 @@ from .const import (
     API_MYCAR,
     API_STATUS,
     API_CHARGING,
+    API_CHARGING_PROFILES,
     API_POSITION,
     API_POS_TO_ADDRESS,
     API_TRIP,
     API_CLIMATER_STATUS,
     API_CLIMATER,
+    API_CLIMATISATION_TIMERS,
     API_DEPARTURE_TIMERS,
     API_DEPARTURE_PROFILES,
     API_MILEAGE,
@@ -91,6 +93,7 @@ from .const import (
     API_RELATION_STATUS,
     API_INVITATIONS,
     #API_ACTION,
+    API_ACTIONS,
     API_IMAGE,
     API_HONK_AND_FLASH,
     API_ACCESS,
@@ -216,15 +219,26 @@ class Connection:
             _LOGGER.warning(f'deleteTokenFile() not successful. Error: {e}')
             return False
 
-    def writeImageFile(self, imageName, imageData, imageDict):
+    def writeImageFile(self, imageName, imageData, imageDict, vin):
         try:
-            with open(f'./www/image_{imageName}.png', "wb") as f:
+            # Target directory in HA container (/config/www)
+            if hasattr(self, '_hass'):
+                base_path = self._hass.config.path("www")
+            else:
+                base_path = os.path.join(".", "www")
+            images_dir = os.path.join(base_path, "pycupra")
+            os.makedirs(images_dir, exist_ok=True)
+
+            file_path = os.path.join(images_dir, f"image_{vin}_{imageName}.png")
+
+            with open(file_path, "wb") as f:
                 f.write(imageData)
-            imageDict[imageName]=f'/local/image_{imageName}.png'
+            imageDict[imageName]=f'/local/image_{vin}_{imageName}.png'
+            #_LOGGER.debug(f"Saved image: {file_path}") # Contains the vin, so should be commented out
             f.close()
             return True
-        except:
-            _LOGGER.warning('writeImageFile() not successful. Ignoring this problem.')
+        except Exception as e:
+            _LOGGER.warning(f'writeImageFile() not successful. Ignoring this problem. Error: {e}')
             return False
 
   # API login/logout/authorization
@@ -844,6 +858,7 @@ class Connection:
                     #self._session_headers['Accept'] = 'application/json'
                     if response.get('capabilities', False):
                         vehicle["capabilities"]=response.get('capabilities')
+                        vehicle["platform"] = response.get('platform', 'MOD3')
                     else:
                         _LOGGER.warning(f"Failed to aquire capabilities information about vehicle with VIN {vehicle}.")
                         if vehicle.get('capabilities',None)!=None:
@@ -1024,7 +1039,7 @@ class Connection:
                 )
                 if response.get('front',False):
                     images: dict[str, str] ={}
-                    for pos in {'front', 'side', 'top', 'rear'}:
+                    for pos in {"front", "side", "top", "rear", "rbcFront", "rbcCable"}:
                         if pos in response:
                             pic = await self._request(
                                 METH_GET,
@@ -1032,7 +1047,7 @@ class Connection:
                             )
                             if len(pic)>0:
                                 loop = asyncio.get_running_loop()
-                                await loop.run_in_executor(None, self.writeImageFile, pos,pic, images)
+                                await loop.run_in_executor(None, self.writeImageFile, pos,pic, images, vin)
                             if pos=='front':
                                 # Crop the front image to a square format
                                 try:
@@ -1049,7 +1064,7 @@ class Connection:
                                     im1 = im.crop((left, top, right, bottom))
                                     byteIO = BytesIO()
                                     im1.save(byteIO, format='PNG')
-                                    await loop.run_in_executor(None, self.writeImageFile, pos+'_cropped',byteIO.getvalue(), images)
+                                    await loop.run_in_executor(None, self.writeImageFile, pos+'_cropped',byteIO.getvalue(), images, vin)
                                 except:
                                     _LOGGER.warning('Cropping front image to square format failed.')
  
@@ -1175,6 +1190,23 @@ class Connection:
             _LOGGER.warning(f'Could not fetch position, error: {error}')
         return False
 
+    async def getClimatisationtimer(self, vin, baseurl) -> dict | bool:
+        """Get climatisation timers."""
+        await self.set_token(self._session_auth_brand)
+        try:
+            response = await self.get(eval(f"f'{API_CLIMATISATION_TIMERS}'"))
+            if response.get('timers', 0)!=0: #check if element 'timers' present, even if empty
+                data={}
+                data['climatisationTimers'] = response
+                return data
+            elif response.get('status_code', {}):
+                _LOGGER.warning(f'Could not fetch climatisation timers, HTTP status code: {response.get("status_code")}')
+            else:
+                _LOGGER.info('Unknown error while trying to fetch data for climatisation timers')
+        except Exception as error:
+            _LOGGER.warning(f'Could not fetch climatisation timers, error: {error}')
+        return False
+
     async def getDeparturetimer(self, vin, baseurl) -> dict | bool:
         """Get departure timers."""
         await self.set_token(self._session_auth_brand)
@@ -1244,14 +1276,14 @@ class Connection:
             return False
         return data
 
-    async def getCharger(self, vin, baseurl, oldChargingData) -> dict | bool:
+    async def getCharger(self, vin, baseurl, oldChargingData, chargingProfilesActivated) -> dict | bool:
         """Get charger data."""
         await self.set_token(self._session_auth_brand)
         try:
             chargingStatus = {}
             chargingInfo = {}
             #chargingModes = {}
-            #chargingProfiles = {}
+            chargingProfiles = {}
             response = await self.get(eval(f"f'{API_CHARGING}/status'"))
             if response.get('battery', {}):
                 chargingStatus = response
@@ -1273,13 +1305,14 @@ class Connection:
                 _LOGGER.warning(f'Could not fetch charging modes, HTTP status code: {response.get("status_code")}')
             else:
                 _LOGGER.info('Unhandled error while trying to fetch charging modes')"""
-            """response = await self.get(eval(f"f'{API_CHARGING}/profiles'"))
-            if response.get('profiles', {}):
-                chargingProfiles = response
-            elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch charging profiles, HTTP status code: {response.get("status_code")}')
-            else:
-                _LOGGER.info('Unhandled error while trying to fetch charging profiles')"""
+            if chargingProfilesActivated:
+                response = await self.get(eval(f"f'{API_CHARGING_PROFILES}'"))
+                if response.get('profiles', 0)!=0:
+                    chargingProfiles = response
+                elif response.get('status_code', {}):
+                    _LOGGER.warning(f'Could not fetch charging profiles, HTTP status code: {response.get("status_code")}')
+                else:
+                    _LOGGER.info('Unhandled error while trying to fetch charging profiles')
             data = {'charging': oldChargingData}
             if chargingStatus != {}:
                 data['charging']['status'] = chargingStatus
@@ -1293,10 +1326,11 @@ class Connection:
             #    data['charging']['modes'] = chargingModes
             #else:
             #    _LOGGER.warning(f'getCharger() got no valid data for charging modes')
-            #if chargingProfiles != {}:
-            #    data['charging']['profiles'] = chargingProfiles
-            #else:
-            #    _LOGGER.warning(f'getCharger() got no valid data for charging profiles')
+            if chargingProfiles != {}:
+                data['charging']['profiles'] = chargingProfiles
+            else:
+                if chargingProfilesActivated:
+                    _LOGGER.warning(f'getCharger() got no valid data for charging profiles')
             return data
         except Exception as error:
             _LOGGER.warning(f'Could not fetch charger, error: {error}')
@@ -1503,12 +1537,15 @@ class Connection:
         return False
 
     async def setCharger(self, vin, baseurl, mode, data) -> dict | bool:
-        """Start/Stop charger."""
+        """Start/Stop charger or change settings."""
         if mode in {'start', 'stop'}:
             capability='charging'
             return await self._setViaAPI(eval(f"f'{API_REQUESTS}/{mode}'"))
         elif mode=='settings':
             return await self._setViaAPI(eval(f"f'{API_CHARGING}/{mode}'"), json=data)
+        elif mode=='update-settings' or mode=='update-battery-care':
+            capability='charging'
+            return await self._setViaAPI(eval(f"f'{API_ACTIONS}/{mode}'"), json=data)
         else:
             _LOGGER.error(f'Not yet implemented. Mode: {mode}. Command ignored')
             raise
@@ -1538,6 +1575,16 @@ class Connection:
             else: # Unknown modes
                 _LOGGER.error(f'Unbekannter setClimater mode: {mode}. Command ignored')
                 return False
+        except:
+            raise
+        return False
+
+    async def setClimatisationtimer(self, vin, baseurl, data, spin) -> dict | bool:
+        """Set climatisation timers."""
+        try:
+            capability = 'climatisation'
+            url= eval(f"f'{API_REQUESTS}/timers'")
+            return await self._setViaPUTtoAPI(url, json = data)
         except:
             raise
         return False

@@ -127,13 +127,15 @@ API_MBB_STATUSDATA = 'https://customer-profile.vwgroup.io/v3/customers/{self._us
 API_PERSONAL_DATA= 'https://customer-profile.vwgroup.io/v3/customers/{self._user_id}/personalData'
 #Other option for personal data is '{baseurl}/v1/users/{self._user_id}'
 
-API_VEHICLES = '{APP_URI}/v2/users/{self._user_id}/garage/vehicles'                                  # Garage info
+API_VEHICLES = '{APP_URI}/v3/users/{self._user_id}/garage/vehicles'                                  # Garage info
 API_MYCAR = '{baseurl}/v5/users/{self._user_id}/vehicles/{vin}/mycar'                                # Vehicle status report
 API_CHARGING = '{baseurl}/v1/vehicles/{vin}/charging'                                                # Vehicle charging information 
+API_CHARGING_PROFILES = '{baseurl}/vehicles/{vin}/charging/profiles'                                 # Vehicle charging profile information 
 #API_OPERLIST = '{homeregion}/api/rolesrights/operationlist/v3/vehicles/{vin}'                       # API Endpoint for supported operations
 #API_CHARGER = 'fs-car/bs/batterycharge/v1/{BRAND}/{COUNTRY}/vehicles/{vin}/charger'                 # Charger data
 API_CLIMATER_STATUS = '{baseurl}/v1/vehicles/{vin}/climatisation/status'                             # Climatisation data
-API_CLIMATER = '{baseurl}/v2/vehicles/{vin}/climatisation'                         # Climatisation data
+API_CLIMATER = '{baseurl}/v2/vehicles/{vin}/climatisation'                                           # Climatisation data
+API_CLIMATISATION_TIMERS = '{baseurl}/vehicles/{vin}/climatisation/timers'                            # Climatisation timers
 API_DEPARTURE_TIMERS = '{baseurl}/v1/vehicles/{vin}/departure-timers'                                 # Departure timers
 API_DEPARTURE_PROFILES = '{baseurl}/v1/vehicles/{vin}/departure/profiles'                             # Departure profiles
 API_POSITION = '{baseurl}/v1/vehicles/{vin}/parkingposition'                                         # Position data
@@ -150,7 +152,7 @@ API_RELATION_STATUS = '{baseurl}/v1/users/{self._user_id}/vehicles/{vin}/relatio
 API_INVITATIONS = '{baseurl}/v1/user/{self._user_id}/invitations'                                    # ???
 API_CAPABILITIES = '{APP_URI}/v1/user/{self._user_id}/vehicle/{vin}/capabilities'                    # ???
 #API_CAPABILITIES_MANAGEMENT = '{API_CAPABILITIES}/management'                                        # ???
-API_IMAGE = '{baseurl}/v1/vehicles/{vin}/renders'
+API_IMAGE = '{baseurl}/v2/vehicles/{vin}/renders'
 API_HONK_AND_FLASH = '{baseurl}//v1/vehicles/{vin}/honk-and-flash'
 API_ACCESS = '{baseurl}//v1/vehicles/{vin}/access/{action}'                                          # to lock or unlock vehicle
 API_REQUESTS = '{baseurl}/vehicles/{vin}/{capability}/requests'
@@ -158,6 +160,7 @@ API_REFRESH = '{baseurl}/v1/vehicles/{vin}/vehicle-wakeup/request'
 API_SECTOKEN = '{baseurl}/v2/users/{self._user_id}/spin/verify'
 API_DESTINATION = '{baseurl}/v1/users/vehicles/{vin}/destination'
 API_LITERALS= '{APP_URI}/v1/content/apps/my-cupra/literals/{language}'                               # Message texts in different langauages, e.g. 'en_GB'
+API_ACTIONS = '{baseurl}/v1/vehicles/{vin}/{capability}/actions'                           # capability e.g. 'charging', mode (e.g. 'update-settings') will be added as postfix
 
 # Still to analyse if needed
 #'{baseurl}/settings/api/v1?vin={vin}&vehicle-model=LeonST&region=US&enrolment-country=DE&platform=MOD3'

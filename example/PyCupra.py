@@ -53,6 +53,7 @@ RESOURCES = [
         "charge_max_ampere",
         "charge_rate",
         "charging_power",
+        "charging_battery_care",
         "charging_state",
 		"charging_cable_connected",
 		"charging_cable_locked",
@@ -60,8 +61,15 @@ RESOURCES = [
 		"climater_action_status",
 		"climatisation_target_temperature",
 		"climatisation_without_external_power",
+        "climatisation_zone_front_left",
+        "climatisation_zone_front_right",
+        "climatisation_at_unlock",
+        "climatisation_window_heating_enabled",
+		"climatisation_time_left",
 		"combined_range",
 		"combustion_range",
+        "climatisationTimer1",
+        "climatisationTimer2",
         "departure1",
         "departure2",
         "departure3",
@@ -77,6 +85,7 @@ RESOURCES = [
 		"electric_climatisation",
 		"electric_range",
 		"energy_flow",
+        "engine",
 		"external_power",
 		"fuel_level",
 		"hood_closed",
@@ -150,6 +159,9 @@ def readCredentialsFile():
         return None
 
 def exportToCSV(vehicle, csvFileName, dataType='short'):
+    if len(vehicle.attrs.get('tripstatistics', {}).get(dataType, []))< 1:
+        _LOGGER.warning(f'No trips statistics of type {dataType}')
+        return False
     df= pd.DataFrame(vehicle._states['tripstatistics'][dataType])
     _LOGGER.debug('Exporting trip data to csv')
     df.to_csv(csvFileName)
@@ -198,15 +210,26 @@ async def demo_set_charger_target_soc(vehicle, value=80):
         print("   Request failed.")
     return success
 
+async def demo_set_battery_care(vehicle, value=True):
+    print('########################################')
+    print('#     Change battery care setting      #')
+    print('########################################')
+    success= await vehicle.set_battery_care(value)
+    if success:
+        print("   Request completed successfully.")
+    else:
+        print("   Request failed.")
+    return success
+
 async def demo_set_timer_schedule(vehicle):
     print('########################################')
     print('#      Change one timer schedule       #')
     print('########################################')
     success= await vehicle.set_timer_schedule(id = 3,                             # id = 1, 2, 3
         schedule = {                                               # Set the departure time, date and periodicity
-            "enabled": True,                                       # Set the timer active or not, True or False, required
+            "enabled": False,                                       # Set the timer active or not, True or False, required
             "recurring": False,                                    # True or False for recurring, required
-            "date": "2025-03-21",                                  # Date for departure, required if recurring=False
+            "date": "2025-11-01",                                  # Date for departure, required if recurring=False
             "time": "12:34",                                       # Time for departure, required
             "days": "nyynnnn",                                     # Days (mon-sun) for recurring schedule (n=disable, y=enable), required if recurring=True
             "nightRateActive": True,                               # True or False Off-peak hours, optional
@@ -214,7 +237,7 @@ async def demo_set_timer_schedule(vehicle):
             "nightRateEnd": "06:00",                               # Off-peak hours end (HH:mm), optional
             "operationCharging": True,                             # True or False for charging, optional
             "operationClimatisation": False,                       # True or False fro climatisation, optional
-            "targetTemp": 22,                                      # Target temperature for climatisation, optional
+            #"targetTemp": 22,                                      # Target temperature for climatisation, optional
             }
         )
     if success:
@@ -261,11 +284,40 @@ async def demo_set_departure_profile_schedule_date(vehicle):
         print("   Request failed.")
     return success
 
+async def demo_set_climatisation_timer_schedule(vehicle):
+    print('########################################')
+    print('#    Change one climatisation timer    #')
+    print('########################################')
+    success= await vehicle.set_climatisation_timer_schedule(id = 1,                             # id = 1, 2
+        schedule = {                                               # Set the departure time, date and periodicity
+            "enabled": False,                                       # Set the timer active or not, True or False, required
+            "recurring": True,                                     # True or False for recurring, required
+            "time": "12:34",                                       # Time for departure, required
+            "days": "nyynnnn",                                     # Days (mon-sun) for recurring schedule (n=disable, y=enable), required if recurring=True
+            }
+        )
+    if success:
+        print("   Request completed successfully.")
+    else:
+        print("   Request failed.")
+    return success
+
 async def demo_set_timer_active(vehicle, id=1, action="off"):
     print('########################################')
     print('#         (De-)Activate one timer      #')
     print('########################################')
-    success= await vehicle.set_timer_active(id, action)                # id = 1, 2, 3, action = "on" or "off".
+    success= await vehicle.set_timer_active(id, action)                # id = 1, 2 action = "on" or "off".
+    if success:
+        print("   Request completed successfully.")
+    else:
+        print("   Request failed.")
+    return success
+
+async def demo_set_climatisation_timer_active(vehicle, id=1, action="off"):
+    print('########################################')
+    print('# (De-)Activate one climatisation timer#')
+    print('########################################')
+    success= await vehicle.set_climatisation_timer_active(id, action)                # id = 1, 2 action = "on" or "off".
     if success:
         print("   Request completed successfully.")
     else:
@@ -305,22 +357,11 @@ async def demo_set_climatisation(vehicle, action="start", temp=18.0):
         print("   Request failed.")
     return success
 
-async def demo_set_climatisation_temp(vehicle, temp=18.0):
+async def demo_set_climatisation_one_setting(vehicle, settingName= 'targetTemperatureInCelsius', value=18.0):
     print('########################################')
-    print('#   Change climatisation temperature   #')
+    print('#   Change one climatisation setting   #')
     print('########################################')
-    success= await vehicle.set_climatisation_temp(temp)            # temperature = integer from 16 to 30
-    if success:
-        print("   Request completed successfully.")
-    else:
-        print("   Request failed.")
-    return success
-
-async def demo_set_battery_climatisation(vehicle, mode=True):
-    print('########################################')
-    print('#   Set battery climatisation setting  #')
-    print('########################################')
-    success= await vehicle.set_battery_climatisation(mode)          # mode = False or True
+    success= await vehicle.set_climatisation_one_setting(settingName, value)            # e.g. temperature = integer from 16 to 30
     if success:
         print("   Request completed successfully.")
     else:
@@ -574,11 +615,17 @@ async def main():
             #await demo_set_charger(vehicle, action = "start")                         # action = "start" or "stop"
             #await demo_set_charger_current(vehicle, value='reduced')                  # value = 1-255/Maximum/Reduced (PHEV: 252 for reduced and 254 for max, EV: Maximum/Reduced)
             #await demo_set_charger_target_soc(vehicle, value=70)                      # value = 1-100
+            #await demo_set_battery_care(vehicle, value=True)                           # value = False or True
 
             #await demo_set_climatisation(vehicle, action = "start", temp=18.0)        # action = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
-            #await demo_set_climatisation_temp(vehicle, temp = 18.0)                   # temp = integer from 16 to 30
-            #await demo_set_battery_climatisation(vehicle, mode=False)                 # mode = False or True
             #await demo_set_windowheating(vehicle, action = "stop")                    # action = "start" or "stop"
+            #await demo_set_climatisation_one_setting(vehicle, 
+            #    settingName = 'targetTemperatureInCelsius', value = 18.0)              # set climatisation temperature 
+            #await demo_set_climatisation_one_setting(vehicle, 'zoneFrontRightEnabled', True) # enable/disable zone front right in climatisation settings 
+            #await demo_set_climatisation_one_setting(vehicle, 'climatisationWithoutExternalPower', False) # enable/disable climatisation without external power 
+
+            #await demo_set_climatisation_timer_active(vehicle, id=1, action="off")      # id = 1, 2, action = "on" or "off".
+            #await demo_set_climatisation_timer_schedule(vehicle)                       # arguments id and schedule can be found in the demo function
 
             #await demo_set_timer_schedule(vehicle)                                    # arguments id and schedule can be found in the demo function
             #await demo_set_timer_active(vehicle, id=3, action="off")                  # id = 1, 2, 3, action = "on" or "off".

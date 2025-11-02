@@ -98,6 +98,6 @@ def datetime2string(data):
     elif isinstance(data, list):
         return [datetime2string(item) for item in data]
     elif isinstance(data, datetime):
-        return data.strftime("%Y-%m-%dT%H:%M:%SZ")
+        return data.isoformat()
     else:
         return data
