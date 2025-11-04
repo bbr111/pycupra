@@ -101,6 +101,7 @@ from .const import (
     API_REQUESTS,
     API_REFRESH,
     API_DESTINATION,
+    API_AUXILIARYHEATING,
 
     PUBLIC_MODEL_IMAGES_SERVER,
     FIREBASE_STATUS_NOT_INITIALISED,
@@ -1572,6 +1573,10 @@ class Connection:
                 return await self._setViaAPI(eval(f"f'{API_REQUESTS}/start'"))
             elif mode == "start": # Start climatisation
                 return await self._setViaAPI(eval(f"f'{API_CLIMATER}/start'"), json = data)
+            elif mode == "auxiliary_start": # Start auxiliary climatisation
+                return await self._setViaAPI(eval(f"f'{API_AUXILIARYHEATING}/start'"), json = data)
+            elif mode == "auxiliary": # Stop auxiliary climatisation
+                return await self._setViaAPI(eval(f"f'{API_AUXILIARYHEATING}/stop'"))
             else: # Unknown modes
                 _LOGGER.error(f'Unbekannter setClimater mode: {mode}. Command ignored')
                 return False

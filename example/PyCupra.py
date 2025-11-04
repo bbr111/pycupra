@@ -70,6 +70,7 @@ RESOURCES = [
 		"combustion_range",
         "climatisationTimer1",
         "climatisationTimer2",
+        "climatisationTimer3",
         "departure1",
         "departure2",
         "departure3",

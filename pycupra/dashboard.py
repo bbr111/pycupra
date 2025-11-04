@@ -540,11 +540,11 @@ class AuxiliaryClimatisation(Switch):
         return self.vehicle.auxiliary_climatisation
 
     async def turn_on(self) -> None:
-        await self.vehicle.set_climatisation(mode = 'auxiliary', spin = self.spin)
+        await self.vehicle.set_climatisation(mode = 'auxiliary_start') #, spin = self.spin)
         #await self.vehicle.update()
 
     async def turn_off(self) -> None:
-        await self.vehicle.set_climatisation(mode = 'off')
+        await self.vehicle.set_climatisation(mode = 'auxiliay_stop')
         #await self.vehicle.update()
 
     @property
@@ -983,6 +983,37 @@ class ClimatisationTimer2(Switch):
     def attributes(self):
         return dict(self.vehicle.climatisationTimer2)
 
+class ClimatisationTimer3(Switch):
+    def __init__(self):
+        super().__init__(attr="climatisationTimer3", name="Climatisation timer 3", icon="mdi:radiator")
+
+    def configurate(self, **config):
+        self.spin = config.get('spin', '')
+
+    @property
+    def state(self):
+        if self.vehicle.climatisationTimer3 != None:
+            status = self.vehicle.climatisationTimer3.get("enabled", "")
+            if status:
+                return True
+        return False
+
+    async def turn_on(self):
+        await self.vehicle.set_climatisationTimer_active(id=3, action="on")
+        #await self.vehicle.update()
+
+    async def turn_off(self):
+        await self.vehicle.set_climatisationTimer_active(id=3, action="off")
+        #await self.vehicle.update()
+
+    @property
+    def assumed_state(self):
+        return False
+
+    @property
+    def attributes(self):
+        return dict(self.vehicle.climatisationTimer3)
+
 class DepartureTimer1(Switch):
     def __init__(self):
         super().__init__(attr="departure1", name="Departure timer 1", icon="mdi:radiator")
@@ -1276,6 +1307,7 @@ def create_instruments():
         #Engine(),
         ClimatisationTimer1(),
         ClimatisationTimer2(),
+        ClimatisationTimer3(),
         DepartureTimer1(),
         DepartureTimer2(),
         DepartureTimer3(),

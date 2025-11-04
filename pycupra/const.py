@@ -161,6 +161,7 @@ API_SECTOKEN = '{baseurl}/v2/users/{self._user_id}/spin/verify'
 API_DESTINATION = '{baseurl}/v1/users/vehicles/{vin}/destination'
 API_LITERALS= '{APP_URI}/v1/content/apps/my-cupra/literals/{language}'                               # Message texts in different langauages, e.g. 'en_GB'
 API_ACTIONS = '{baseurl}/v1/vehicles/{vin}/{capability}/actions'                           # capability e.g. 'charging', mode (e.g. 'update-settings') will be added as postfix
+API_AUXILIARYHEATING = '{baseurl}/v1/vehicles/{vin}/auxiliary-heating'                              # action (start/stop) will be added as postfix
 
 # Still to analyse if needed
 #'{baseurl}/settings/api/v1?vin={vin}&vehicle-model=LeonST&region=US&enrolment-country=DE&platform=MOD3'

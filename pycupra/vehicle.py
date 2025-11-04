@@ -91,6 +91,7 @@ class Vehicle:
             'climatisationTimers': {'active': False, 'reason': 'not supported'},
             'ignition': {'active': False, 'reason': 'not supported'},
             'vehicleLights': {'active': False, 'reason': 'not supported'},
+            'auxiliaryHeating': {'active': False, 'reason': 'not supported'},
         }
 
         self._last_full_update = datetime.now(tz=None) - timedelta(seconds=1200)
@@ -139,8 +140,8 @@ class Vehicle:
                             data['supportsTimerClimatisation']=True
                         if capa['parameters'].get('supportsStartParallelClimatisationWindowHeating',False)==True or capa['parameters'].get('supportsStartParallelClimatisationWindowHeating',False)=='true':
                             data['supportsStartParallelClimatisationWindowHeating']=True
-                        #if capa['parameters'].get('supportsStartParallelClimatisationWindowHeating',False)==True or capa['parameters'].get('supportsStartParallelClimatisationWindowHeating',False)=='true':
-                        #    data['supportsStartParallelClimatisationWindowHeating']=True
+                        if capa['parameters'].get('supportsTargetTemperatureInStartAuxiliaryHeating',False)==True or capa['parameters'].get('supportsTargetTemperatureInStartAuxiliaryHeating',False)=='true':
+                            data['supportsTargetTemperatureInStartAuxiliaryHeating']=True
                     self._relevantCapabilties[id].update(data)
         else:
             _LOGGER.warning(f"No capabilities information stored for vehicle with VIN {self.vin}")
@@ -680,7 +681,8 @@ class Vehicle:
                         data['timers'].append(singleTimer)
                     else:
                         raise SeatInvalidRequestException(f'Timer action "{action}" is not supported.')
-                    return await self._set_timers(data)
+                    converted_data = datetime2string(data) # datetime to string
+                    return await self._set_timers(converted_data)
             raise SeatInvalidRequestException(f'Departure timer id {id} not found.')
         else:
             raise SeatInvalidRequestException('Departure timers are not supported.')
@@ -1192,7 +1194,7 @@ class Vehicle:
         """Turn on/off climatisation with electric/auxiliary heater."""
         data = {}
         # Validate user input
-        if mode.lower() not in ['electric', 'auxiliary', 'start', 'stop', 'on', 'off']:
+        if mode.lower() not in ['electric', 'auxiliary_start', 'auxiliary_stop', 'start', 'stop', 'on', 'off']:
             _LOGGER.error(f"Invalid mode for 'set_climatisation': {mode}")
             raise SeatInvalidRequestException(f"Invalid mode for set_climatisation: {mode}")
         elif mode == 'auxiliary' and spin is None:
@@ -1212,7 +1214,7 @@ class Vehicle:
             if self._relevantCapabilties.get('climatisation', {}).get('active', False):
                 if mode in ['Start', 'start', 'Electric', 'electric', 'On', 'on']:
                     mode = 'start'
-                if mode in ['start', 'auxiliary']:
+                if mode in ['start', 'auxiliary_start']:
                     #if hvpower is not None:
                     #    withoutHVPower = hvpower
                     #else:
@@ -1223,7 +1225,11 @@ class Vehicle:
                     }
                     return await self._set_climater(mode, data, spin)
                 else:
-                    if self._requests['climatisation'].get('id', False) or self.electric_climatisation:
+                    if mode=='auxiliary_stop' and self.auxiliary_climatisation:
+                        request_id=self._requests.get('climatisation', 0)
+                        data={}
+                        return await self._set_climater(mode, data, spin)
+                    elif self._requests['climatisation'].get('id', False) or self.electric_climatisation:
                         request_id=self._requests.get('climatisation', 0)
                         mode = 'stop'
                         data={}
@@ -2501,8 +2507,16 @@ class Vehicle:
     @property
     def climatisation_time_left(self):
         """Return time left for climatisation in hours:minutes."""
-        if self.attrs.get('airConditioning', {}).get('remainingTimeToReachTargetTemperatureInSeconds', False):
+        if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('remainingClimatisationTimeInMinutes', False):
             minutes = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('remainingClimatisationTimeInMinutes', 0)
+            try:
+                if not 0 <= minutes <= 65535:
+                    return "00:00"
+                return "%02d:%02d" % divmod(minutes, 60)
+            except Exception:
+                pass
+        if self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('remainingClimatisationTimeInMinutes', False):
+            minutes = self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('remainingClimatisationTimeInMinutes', 0)
             try:
                 if not 0 <= minutes <= 65535:
                     return "00:00"
@@ -2515,6 +2529,9 @@ class Vehicle:
     def is_climatisation_time_left_supported(self) -> bool:
         """Return true if remainingTimeToReachTargetTemperatureInSeconds is supported."""
         if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('remainingClimatisationTimeInMinutes', False):
+            return True
+        # If auxiliaryHeating is present, then is_climatisation_time_left_supported() is also True
+        if self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('remainingClimatisationTimeInMinutes', False):
             return True
         return False
 
@@ -2640,25 +2657,19 @@ class Vehicle:
     @property
     def auxiliary_climatisation(self) -> bool:
         """Return status of auxiliary climatisation."""
-        climatisation_type = self.attrs.get('climater', {}).get('settings', {}).get('heaterSource', {}).get('content', '')
-        status = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('climatisationState', '')
-        if status in ['heating', 'cooling', 'ventilation', 'heatingAuxiliary', 'on'] and climatisation_type == 'auxiliary':
-            return True
-        elif status in ['heatingAuxiliary'] and climatisation_type == 'electric':
-            return True
+        if self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('climatisationState', False):
+            status = self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('climatisationState', '')
+            if status in ['heating', 'cooling', 'on']: 
+                return True
         else:
             return False
 
     @property
     def is_auxiliary_climatisation_supported(self) -> bool:
         """Return true if vehicle has auxiliary climatisation."""
-        #if self._services.get('rclima_v1', False):
-        #if self._relevantCapabilties.get('climatisation', {}).get('active', False):
-            #functions = self._services.get('rclima_v1', {}).get('operations', [])
-            #for operation in functions:
-            #    if operation['id'] == 'P_START_CLIMA_AU':
-            #if 'P_START_CLIMA_AU' in functions:
-            #        return True
+        if self.attrs.get('climater', False):
+            if 'climatisationState' in self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}):
+                return True
         return False
 
     @property
@@ -3042,6 +3053,27 @@ class Vehicle:
     def is_climatisationTimer2_supported(self) -> bool:
         """Return true if climatisation timer 2 is supported."""
         if len(self.attrs.get('climatisationTimers', {}).get('timers', [])) >= 2:
+            return True
+        return False
+
+    @property
+    def climatisationTimer3(self):
+        """Return climatisation timer status and attributes."""
+        if self.attrs.get('climatisationTimers', False):
+            try:
+                data = {}
+                timerdata = self.attrs.get('climatisationTimers', {}).get('timers', [])
+                timer = timerdata[2]
+                data.update(timer)
+                return data
+            except:
+                pass
+        return None
+
+    @property
+    def is_climatisationTimer3_supported(self) -> bool:
+        """Return true if climatisation timer 3 is supported."""
+        if len(self.attrs.get('climatisationTimers', {}).get('timers', [])) >= 3:
             return True
         return False
 
