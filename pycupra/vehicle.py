@@ -92,6 +92,7 @@ class Vehicle:
             'ignition': {'active': False, 'reason': 'not supported'},
             'vehicleLights': {'active': False, 'reason': 'not supported'},
             'auxiliaryHeating': {'active': False, 'reason': 'not supported'},
+            'geofence': {'active': False, 'reason': 'not supported'},
         }
 
         self._last_full_update = datetime.now(tz=None) - timedelta(seconds=1200)
@@ -306,7 +307,7 @@ class Vehicle:
 
     async def get_climater(self) -> bool:
         """Fetch climater data if function is enabled."""
-        if self._relevantCapabilties.get('climatisation', {}).get('active', False):
+        if self._relevantCapabilties.get('climatisation', {}).get('active', False) or self._relevantCapabilties.get('auxiliaryHeating', {}).get('active', False):
             data = await self._connection.getClimater(self.vin, self._apibase, deepcopy(self.attrs.get('climater',{})))
             if data:
                 self._states.update(data)
@@ -398,7 +399,7 @@ class Vehicle:
 
     async def get_climatisation_timers(self) -> bool:
         """Fetch climatisation timer data if function is enabled."""
-        if self._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
+        if self._relevantCapabilties.get('climatisationTimers', {}).get('active', False) or self._relevantCapabilties.get('auxiliaryHeating', {}).get('active', False):
             data = await self._connection.getClimatisationtimer(self.vin, self._apibase)
             if data:
                 self._states.update(data)
@@ -770,12 +771,12 @@ class Vehicle:
                 data['climatisation']=True
             else:
                 data['climatisation']=False
-            if schedule.get("nightRateAcvtive", False):
+            if schedule.get("nightRateActive", False):
                 preferedChargingTimes= [{
                     "id" : 1,
                     "enabled" : True,
                     "startTimeLocal" : schedule.get('nightRateStart',"00:00"),
-                    "endTimeLocal" : schedule.get('nightRateStop',"00:00")
+                    "endTimeLocal" : schedule.get('nightRateEnd',"00:00")
                     }]
             else:
                 preferedChargingTimes= [{
@@ -795,15 +796,13 @@ class Vehicle:
                         "fridays":(schedule.get('days',"nnnnnnn")[4]=='y'),
                         "saturdays":(schedule.get('days',"nnnnnnn")[5]=='y'),
                         "sundays":(schedule.get('days',"nnnnnnn")[6]=='y'),
-                        #"preferredChargingTimes": preferedChargingTimes
                     }
                 }
             else:
                 startDateTime = datetime.fromisoformat(schedule.get('date',"2025-01-01")+'T'+schedule.get('time',"00:00"))
-                _LOGGER.info(f'startDateTime={startDateTime.isoformat()}')
+                _LOGGER.info(f'startDateTime={datetime2string(startDateTime)}')
                 data['singleTimer']= {
-                    "startDateTimeLocal": startDateTime.isoformat(),
-                    #"preferredChargingTimes": preferedChargingTimes
+                    "startDateTimeLocal": datetime2string(startDateTime),
                     }
             data["preferredChargingTimes"]= preferedChargingTimes
                 
@@ -862,7 +861,7 @@ class Vehicle:
                         timerDataCopy = deepcopy(timerData)
                         timerDataCopy['enabled']=True
                         if timerDataId:
-                            newTimers = self.attrs.get('departureTimers',{}).get('timers',[])
+                            newTimers = datetime2string(self.attrs.get('departureTimers',{}).get('timers',[]))
                             for newTimer in newTimers:
                                 if newTimer.get('id',-1)==timerDataId:
                                     _LOGGER.debug(f'Value of timer sent:{timerData}')
@@ -874,7 +873,7 @@ class Vehicle:
                                         actionSuccessful=True
                                     break
                     retry = retry +1
-                if True: #actionSuccessful:
+                if actionSuccessful:
                     #_LOGGER.debug('POST request for departure timers successful. New status as expected.')
                     self._requests.get('departuretimer', {}).pop('id')
                     return True
@@ -939,6 +938,10 @@ class Vehicle:
                 newDepProfileSchedule['enabled']=True
             else:
                 newDepProfileSchedule['enabled']=False
+            # Convert the 'time' in schedule from local time to utc
+            tempTimeAsDatetime = datetime.strptime(schedule.get('date',"2025-01-01")+'T'+schedule.get('time',"00:00")+":00", '%Y-%m-%dT%H:%M:%S').replace(tzinfo=None)
+            schedule['time'] = tempTimeAsDatetime.astimezone(timezone.utc).strftime("%H:%M")
+
             if schedule.get("recurring",False):
                 newDepProfileSchedule['recurringTimer']= {
                     "startTime": schedule.get('time',"00:00"),
@@ -954,10 +957,10 @@ class Vehicle:
                 }
             else:
                 if self._relevantCapabilties.get('departureProfiles', {}).get('supportsSingleTimer', False):
-                    startDateTime = datetime.fromisoformat(schedule.get('date',"2025-01-01")+'T'+schedule.get('time',"00:00"))
-                    _LOGGER.info(f'startDateTime={datetime2string(startDateTime)}')
+                    startDateTime = datetime.strptime(schedule.get('date',"2025-01-01")+'T'+schedule.get('time',"00:00")+":00+0000", '%Y-%m-%dT%H:%M:%S%z')
+                    _LOGGER.info(f'startDateTime={datetime2string(startDateTime, True)}')
                     newDepProfileSchedule['singleTimer']= {
-                        "startDateTime": datetime2string(startDateTime),
+                        "startDateTime": datetime2string(startDateTime, True),
                         }
                 else:
                     raise SeatInvalidRequestException('Vehicle does not support single timer.')
@@ -1002,6 +1005,7 @@ class Vehicle:
                         _LOGGER.debug(f'Changing departure profile {id} to {action}.')
                     else:
                         raise SeatInvalidRequestException(f'Profile action "{action}" is not supported.')
+                    break
             if idFound:
                 return await self._set_departure_profiles(data, action=action)
             raise SeatInvalidRequestException(f'Departure profile id {id} not found in {data.get('timers',[])}.')
@@ -1021,7 +1025,7 @@ class Vehicle:
                 raise SeatRequestInProgressException('Scheduling of departure profile is already in progress')
         try:
             self._requests['latest'] = 'Departureprofile'
-            converted_data = datetime2string(data) # datetime to string
+            converted_data = datetime2string(data, True) # datetime to string
             response = await self._connection.setDepartureprofile(self.vin, self._apibase, converted_data, spin=False)
             if not response:
                 self._requests['departureprofile'] = {'status': 'Failed'}
@@ -1036,7 +1040,7 @@ class Vehicle:
                 }
                 # if firebaseStatus is FIREBASE_STATUS_ACTIVATED, the request is assumed successful. Waiting for push notification before rereading status
                 if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
-                    _LOGGER.debug('POST request for change of departure profiles assumed successful. Waiting for push notification')
+                    _LOGGER.debug('PUT request for change of departure profiles assumed successful. Waiting for push notification')
                     return True
                 # Update the departure profile data and check, if they have changed as expected
                 retry = 0
@@ -1052,7 +1056,7 @@ class Vehicle:
                             actionSuccessful=True
                     else:
                         sendData = data.get('timers',[])
-                        newData = self.attrs.get('departureProfiles',{}).get('timers',[])
+                        newData = datetime2string(self.attrs.get('departureProfiles',{}).get('timers',[]), True)
                         _LOGGER.debug('Checking if new departure profiles are as expected:')
                         _LOGGER.debug(f'Value of data sent:{sendData}')
                         _LOGGER.debug(f'Value of data read:{newData}')
@@ -1210,8 +1214,8 @@ class Vehicle:
         #if hvpower is not None:
         #    if not isinstance(hvpower, bool):
         #        raise SeatInvalidRequestException(f"Invalid type for hvpower")
-        if self.is_electric_climatisation_supported:
-            if self._relevantCapabilties.get('climatisation', {}).get('active', False):
+        if self.is_electric_climatisation_supported or self.is_auxiliary_climatisation_supported:
+            if self._relevantCapabilties.get('climatisation', {}).get('active', False) or self._relevantCapabilties.get('auxiliaryHeating', {}).get('active', False):
                 if mode in ['Start', 'start', 'Electric', 'electric', 'On', 'on']:
                     mode = 'start'
                 if mode in ['start', 'auxiliary_start']:
@@ -1223,9 +1227,11 @@ class Vehicle:
                             'targetTemperature': temp,
                             'targetTemperatureUnit': 'celsius',
                     }
+                    if mode == 'auxiliary_start':
+                        data['targetTemperature'] = int(temp) # auxiliary heating only supports integer temperature values
                     return await self._set_climater(mode, data, spin)
                 else:
-                    if mode=='auxiliary_stop' and self.auxiliary_climatisation:
+                    if mode=='auxiliary_stop' and (self._requests['climatisation'].get('id', False) or self.auxiliary_climatisation):
                         request_id=self._requests.get('climatisation', 0)
                         data={}
                         return await self._set_climater(mode, data, spin)
@@ -1243,9 +1249,12 @@ class Vehicle:
 
     async def _set_climater(self, mode, data, spin = False) -> bool:
         """Climater actions."""
-        if not self._relevantCapabilties.get('climatisation', {}).get('active', False):
+        if not self._relevantCapabilties.get('climatisation', {}).get('active', False) and mode in {'start', 'stop', 'windowHeater start', 'windowHeater stop'}:
             _LOGGER.info('Remote control of climatisation functions is not supported.')
             raise SeatInvalidRequestException('Remote control of climatisation functions is not supported.')
+        if not self._relevantCapabilties.get('auxiliaryHeating', {}).get('active', False) and mode in {'auxiliary_start', 'auxiliary_stop'}:
+            _LOGGER.info('Remote control of auxiliary heating functions is not supported.')
+            raise SeatInvalidRequestException('Remote control of auxiliary heating functions is not supported.')
         if self._requests['climatisation'].get('id', False):
             timestamp = self._requests.get('climatisation', {}).get('timestamp', datetime.now())
             expired = datetime.now() - timedelta(minutes=1)
@@ -1283,6 +1292,12 @@ class Vehicle:
                     elif mode == 'stop':
                         if not self.electric_climatisation:
                             actionSuccessful = True
+                    if mode == 'auxiliary_start':
+                        if self.auxiliary_climatisation:
+                            actionSuccessful = True
+                    elif mode == 'auxiliary_stop':
+                        if not self.auxiliary_climatisation:
+                            actionSuccessful = True
                     elif mode == 'settings':
                         if data.get('targetTemperature',0)== self.climatisation_target_temperature and data.get('climatisationWithoutExternalPower',False)== self.climatisation_without_external_power:
                             actionSuccessful = True
@@ -1312,16 +1327,16 @@ class Vehicle:
     async def set_climatisation_timer_active(self, id=1, action='off') -> bool:
         """ Activate/deactivate climatisation timers. """
         data: dict[str, Any] = {}
-        supported = "is_climatisationTimer" + str(id) + "_supported"
+        supported = "is_climatisation_timer" + str(id) + "_supported"
         if getattr(self, supported) is not True:
             raise SeatConfigException(f'This vehicle does not support climatisation timer id {id}.')
         if self._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
             data= deepcopy(self.attrs.get('climatisationTimers'))
             if len(data.get('timers', []))<1:
                 raise SeatInvalidRequestException(f'No timers found in climatisationTimers: {data}.')
-            idFound=False
             data.pop('carCapturedTimestamp')
             data.pop('timeInCar')
+            idFound=False
             for e in range(len(data.get('timers', []))):
                 if data['timers'][e].get('id',-1)==id:
                     if action in ['on', 'off']:
@@ -1333,9 +1348,11 @@ class Vehicle:
                         idFound=True
                         _LOGGER.debug(f'Changing climatisation timer {id} to {action}.')
                     else:
-                        raise SeatInvalidRequestException(f'Profile action "{action}" is not supported.')
+                        raise SeatInvalidRequestException(f'Climatisation timer action "{action}" is not supported.')
+                    break
+
             if idFound:
-                converted_data = datetime2string(data) # datetime to string
+                converted_data = datetime2string(data, True) # datetime to string
                 return await self._set_climatisation_timers(converted_data)
             else:
                 raise SeatInvalidRequestException(f'Climatisation timer id {id} not found.')
@@ -1346,7 +1363,7 @@ class Vehicle:
         """ Set climatisation timer schedule. """
         data = {}
         # Validate required user inputs
-        supported = "is_climatisationTimer" + str(id) + "_supported"
+        supported = "is_climatisation_timer" + str(id) + "_supported"
         if getattr(self, supported) is not True:
             raise SeatConfigException(f'This vehicle does not support climatisation timer id {id}.')
         if not schedule:
@@ -1389,14 +1406,11 @@ class Vehicle:
                     }
                 }
             else:
-                if self._relevantCapabilties.get('departureProfiles', {}).get('supportsSingleTimer', False):
-                    startDateTime = datetime.fromisoformat(schedule.get('date',"2025-01-01")+'T'+schedule.get('time',"00:00"))
-                    _LOGGER.info(f'startDateTime={datetime2string(startDateTime)}')
-                    newSchedule['singleTimer']= {
-                        "startDateTime": datetime2string(startDateTime),
-                        }
-                else:
-                    raise SeatInvalidRequestException('Vehicle does not support single timer.')
+                startDateTime = datetime.strptime(schedule.get('date',"2025-01-01")+'T'+schedule.get('time',"00:00")+":00+0000", '%Y-%m-%dT%H:%M:%S%z')
+                _LOGGER.info(f'startDateTime={datetime2string(startDateTime)}')
+                newSchedule['singleTimer']= {
+                    "startDateTime": datetime2string(startDateTime, True),
+                    }
 
             # Now we have to substitute the current climatisation timer schedule with the given id by the new one
             data= deepcopy(self.attrs.get('climatisationTimers'))
@@ -1410,14 +1424,14 @@ class Vehicle:
                     data['timers'][e] = newSchedule
                     idFound=True
             if idFound:
-                converted_data = datetime2string(data) # datetime to string
+                converted_data = datetime2string(data, True) # datetime to string
                 return await self._set_climatisation_timers(converted_data)
             raise SeatInvalidRequestException(f'Climatisation timer id {id} not found in {data.get('timers',[])}.')
         else:
             _LOGGER.info('Climatisation timer are not supported.')
-            raise SeatInvalidRequestException('Climatisation are not supported.')
+            raise SeatInvalidRequestException('Climatisation timer are not supported.')
 
-    async def _set_climatisation_timers(self, data=None) -> bool:
+    async def _set_climatisation_timers(self, data=None, spin= False) -> bool:
         """ Set climatisation timers. """
         if not self._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
             raise SeatInvalidRequestException('Climatisation timers are not supported.')
@@ -1431,7 +1445,7 @@ class Vehicle:
 
         try:
             self._requests['latest'] = 'Climatisationtimer'
-            response = await self._connection.setClimatisationtimer(self.vin, self._apibase, data, spin=False)
+            response = await self._connection.setClimatisationtimer(self.vin, self._apibase, data)
             if not response:
                 self._requests['climatisationtimer'] = {'status': 'Failed'}
                 _LOGGER.error('Failed to execute climatisation timer request')
@@ -1445,7 +1459,7 @@ class Vehicle:
                 }
                 # if firebaseStatus is FIREBASE_STATUS_ACTIVATED, the request is assumed successful. Waiting for push notification before rereading status
                 if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
-                    _LOGGER.debug('POST request for change of climatisation timers assumed successful. Waiting for push notification')
+                    _LOGGER.debug('PUT request for change of climatisation timers assumed successful. Waiting for push notification')
                     return True
                 # Update the climatisation timers data and check, if they have changed as expected
                 retry = 0
@@ -1453,30 +1467,20 @@ class Vehicle:
                 while not actionSuccessful and retry < 2:
                     await asyncio.sleep(15)
                     await self.get_climatisation_timers()
-                    if True:
-                        _LOGGER.debug('Checking if new climatisation timer is as expected:')
-                        timerData = data.get('timers',[])[0]
-                        timerDataId = timerData.get('id',False)
-                        timerDataCopy = deepcopy(timerData)
-                        timerDataCopy['enabled']=True
-                        if timerDataId:
-                            newTimers = self.attrs.get('climatisationTimers',{}).get('timers',[])
-                            for newTimer in newTimers:
-                                if newTimer.get('id',-1)==timerDataId:
-                                    _LOGGER.debug(f'Value of timer sent:{timerData}')
-                                    _LOGGER.debug(f'Value of timer read:{newTimer}')
-                                    if timerData==newTimer: 
-                                        actionSuccessful=True
-                                    elif timerDataCopy==newTimer: 
-                                        _LOGGER.debug('Data written and data read are the same, but the timer is activated.')
-                                        actionSuccessful=True
-                                    break
+                    _LOGGER.debug('Checking if new climatisation timer is as expected:')
+                    sendData = data.get('timers',[])
+                    newData = datetime2string(self.attrs.get('climatisationTimers',{}).get('timers',[]), True)
+                    _LOGGER.debug('Checking if new climatisation timers are as expected:')
+                    _LOGGER.debug(f'Value of data sent:{sendData}')
+                    _LOGGER.debug(f'Value of data read:{newData}')
+                    if sendData==newData:
+                        actionSuccessful=True
                     retry = retry +1
-                if True: #actionSuccessful:
-                    #_LOGGER.debug('POST request for climatisation timers successful. New status as expected.')
+                if actionSuccessful:
+                    #_LOGGER.debug('PUT request for climatisation timers successful. New status as expected.')
                     self._requests.get('climatisationtimer', {}).pop('id')
                     return True
-                _LOGGER.error('Response to POST request seemed successful but the climatisation timers status did not change as expected.')
+                _LOGGER.error('Response to PUT request seemed successful but the climatisation timers status did not change as expected.')
                 return False
         except (SeatInvalidRequestException, SeatException):
             raise
@@ -1484,6 +1488,163 @@ class Vehicle:
             _LOGGER.warning(f'Failed to execute climatisation timer request - {error}')
             self._requests['climatisationtimer'] = {'status': 'Exception'}
         raise SeatException('Failed to set climatisation timer schedule')
+
+    async def set_auxiliary_heating_timer_active(self, id=1, action='off', spin= False) -> bool:
+        """ Activate/deactivate auxiliary heating timers. """
+        data: dict[str, Any] = {}
+        supported = "is_climatisation_timer" + str(id) + "_supported" # the timers for auxiliary heating are climatisation timers, only changing them is different
+        if getattr(self, supported) is not True:
+            raise SeatConfigException(f'This vehicle does not support climatisation timer id {id}.')
+        if self._relevantCapabilties.get('auxiliaryHeating', {}).get('active', False):
+            allTimers= self.attrs.get('climatisationTimers',{}).get('timers', [])
+            for singleTimer in allTimers:
+                if singleTimer.get('id',-1)==id:
+                    if action in ['on', 'off']:
+                        if action=='on':
+                            enabled=True
+                        else:
+                            enabled=False
+                        singleTimer['enabled'] = enabled
+                        data = {
+                            'timers' : []
+                        }
+                        data['timers'].append(singleTimer)
+                    else:
+                        raise SeatInvalidRequestException(f'Auxiliary heatimg timer action "{action}" is not supported.')
+                    converted_data = datetime2string(data, True) # datetime to string
+                    return await self._set_auxiliary_heating_timers(converted_data, spin)
+            raise SeatInvalidRequestException(f'Climatisation timer id {id} not found.')
+        else:
+            raise SeatInvalidRequestException('Changing of auxiliary heating timers not supported.')
+
+    async def set_auxiliary_heating_timer_schedule(self, id, schedule={}, spin= False) -> bool:
+        """ Set climatisation timer schedule. """
+        data = {}
+        # Validate required user inputs
+        supported = "is_climatisation_timer" + str(id) + "_supported"
+        if getattr(self, supported) is not True:
+            raise SeatConfigException(f'This vehicle does not support climatisation timer id {id}.')
+        if not schedule:
+            raise SeatInvalidRequestException('A schedule must be set.')
+        if not isinstance(schedule.get('enabled', ''), bool):
+            raise SeatInvalidRequestException('The enabled variable must be set to True or False.')
+        if not isinstance(schedule.get('recurring', ''), bool):
+            raise SeatInvalidRequestException('The recurring variable must be set to True or False.')
+        if not re.match('^[0-9]{2}:[0-9]{2}$', schedule.get('time', '')):
+            raise SeatInvalidRequestException('The time for the timer must be set in 24h format HH:MM.')
+
+        # Validate optional inputs
+        if schedule.get('recurring', False):
+            if not re.match('^[yn]{7}$', schedule.get('days', '')):
+                raise SeatInvalidRequestException('For recurring schedules the days variable must be set to y/n mask (mon-sun with only wed enabled): nnynnnn.')
+        elif not schedule.get('recurring'):
+            if not re.match('^[0-9]{4}-[0-9]{2}-[0-9]{2}$', schedule.get('date', '')):
+                raise SeatInvalidRequestException('For single climatisation timer schedule the date variable must be set to YYYY-mm-dd.')
+
+        if self._relevantCapabilties.get('auxiliaryHeating', {}).get('active', False):
+            newSchedule = {}
+            # Prepare data and execute
+            newSchedule['id'] = id
+            # Converting schedule to data map
+            if schedule.get("enabled",False):
+                newSchedule['enabled']=True
+            else:
+                newSchedule['enabled']=False
+            if schedule.get("recurring",False):
+                newSchedule['recurringTimer']= {
+                    "startTimeLocal": schedule.get('time',"00:00"),
+                    "recurringOn":{""
+                        "mondays":(schedule.get('days',"nnnnnnn")[0]=='y'),
+                        "tuesdays":(schedule.get('days',"nnnnnnn")[1]=='y'),
+                        "wednesdays":(schedule.get('days',"nnnnnnn")[2]=='y'),
+                        "thursdays":(schedule.get('days',"nnnnnnn")[3]=='y'),
+                        "fridays":(schedule.get('days',"nnnnnnn")[4]=='y'),
+                        "saturdays":(schedule.get('days',"nnnnnnn")[5]=='y'),
+                        "sundays":(schedule.get('days',"nnnnnnn")[6]=='y'),
+                    }
+                }
+            else:
+                startDateTime = datetime.strptime(schedule.get('date',"2025-01-01")+'T'+schedule.get('time',"00:00")+":00+0000", '%Y-%m-%dT%H:%M:%S%z')
+                _LOGGER.info(f'startDateTimeLocal={datetime2string(startDateTime)}')
+                newSchedule['singleTimer']= {
+                    "startDateTimeLocal": datetime2string(startDateTime, True),
+                    }
+
+            # Now we have to embed the data for the timer 'id' in timers[]
+            data={
+                'timers' : [newSchedule]
+            }
+            return await self._set_auxiliary_heating_timers(data, spin)
+        else:
+            _LOGGER.info('Auxiliary heating timer are not supported.')
+            raise SeatInvalidRequestException('Auxiliary heating timer are not supported.')
+
+    async def _set_auxiliary_heating_timers(self, data=None, spin= False) -> bool:
+        """ Set climatisation timers. """
+        if not self._relevantCapabilties.get('auxiliaryHeating', {}).get('active', False):
+            raise SeatInvalidRequestException('Auxiliary heating timers are not supported.')
+        if self._requests['climatisationtimer'].get('id', False):
+            timestamp = self._requests.get('climatisationtimer', {}).get('timestamp', datetime.now())
+            expired = datetime.now() - timedelta(minutes=1)
+            if expired > timestamp:
+                self._requests.get('climatisationtimer', {}).pop('id')
+            else:
+                raise SeatRequestInProgressException('Scheduling of auxiliary heating timer is already in progress')
+
+        try:
+            self._requests['latest'] = 'Climatisationtimer'
+            response = await self._connection.setAuxiliaryheatingtimer(self.vin, self._apibase, data, spin=spin)
+            if not response:
+                self._requests['climatisationtimer'] = {'status': 'Failed'}
+                _LOGGER.error('Failed to execute auxiliary heating timer request')
+                raise SeatException('Failed to execute auxiliary heating timer request')
+            else:
+                self._requests['remaining'] = response.get('rate_limit_remaining', -1)
+                self._requests['climatisationtimer'] = {
+                    'timestamp': datetime.now(),
+                    'status': response.get('state', 'Unknown'),
+                    'id': response.get('id', 0),
+                }
+                # if firebaseStatus is FIREBASE_STATUS_ACTIVATED, the request is assumed successful. Waiting for push notification before rereading status
+                if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
+                    _LOGGER.debug('POST request for change of auxiliary heating timers assumed successful. Waiting for push notification')
+                    return True
+                # Update the climatisation timers data and check, if they have changed as expected
+                retry = 0
+                actionSuccessful = False
+                while not actionSuccessful and retry < 2:
+                    await asyncio.sleep(15)
+                    await self.get_climatisation_timers()
+                    _LOGGER.debug('Checking if new auxiliary heating timer is as expected:')
+                    timerData = data.get('timers',[])[0]
+                    timerDataId = timerData.get('id',False)
+                    timerDataCopy = deepcopy(timerData)
+                    timerDataCopy['enabled']=True
+                    if timerDataId:
+                        newTimers = datetime2string(self.attrs.get('climatisationTimers',{}).get('timers',[]))
+                        for newTimer in newTimers:
+                            if newTimer.get('id',-1)==timerDataId:
+                                _LOGGER.debug(f'Value of timer sent:{timerData}')
+                                _LOGGER.debug(f'Value of timer read:{newTimer}')
+                                if timerData==newTimer: 
+                                    actionSuccessful=True
+                                elif timerDataCopy==newTimer: 
+                                    _LOGGER.debug('Data written and data read are the same, but the timer is activated.')
+                                    actionSuccessful=True
+                                break
+                    retry = retry +1
+                if actionSuccessful:
+                    #_LOGGER.debug('PUT request for climatisation timers successful. New status as expected.')
+                    self._requests.get('climatisationtimer', {}).pop('id')
+                    return True
+                _LOGGER.error('Response to POST request seemed successful but the auxiliary heating timers status did not change as expected.')
+                return False
+        except (SeatInvalidRequestException, SeatException):
+            raise
+        except Exception as error:
+            _LOGGER.warning(f'Failed to execute auxiliary heating timer request - {error}')
+            self._requests['climatisationtimer'] = {'status': 'Exception'}
+        raise SeatException('Failed to set auxiliary heating timer schedule')
 
     # Parking heater heating/ventilation (RS)
     async def set_pheater(self, mode, spin) -> bool:
@@ -1677,8 +1838,24 @@ class Vehicle:
                 if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
                     _LOGGER.debug('POST request for wakeup vehicle assumed successful. Waiting for push notification')
                     return True
+                last_connected_utc = self.attrs.get('status').get('updatedAt','')
+                # Update the status report and check, if timestamp 'last connected' has changed as expected
+                retry = 0
+                actionSuccessful = False
+                while not actionSuccessful and retry < 2:
+                    await asyncio.sleep(15)
+                    await self.get_statusreport()
+                    _LOGGER.debug('Checking if the timestamp of the last connection of the vehicle has changed:')
+                    if last_connected_utc != self.attrs.get('status').get('updatedAt',''):
+                        actionSuccessful = True
+                    retry = retry +1
                 await self.update(updateType=1) #full update after set_refresh
-                return True
+                if actionSuccessful == True: 
+                    _LOGGER.debug('POST request for refresh successful. New status as expected.')
+                    self._requests.get('refresh', {}).pop('id')
+                    return True
+                _LOGGER.error('Response to POST request seemed successful but the timestamp, when the vehicle was last connected,  did not change as expected.')
+                return False
         except(SeatInvalidRequestException, SeatException):
             raise
         except Exception as error:
@@ -2507,32 +2684,36 @@ class Vehicle:
     @property
     def climatisation_time_left(self):
         """Return time left for climatisation in hours:minutes."""
+        minutes = 0
         if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('remainingClimatisationTimeInMinutes', False):
             minutes = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('remainingClimatisationTimeInMinutes', 0)
-            try:
-                if not 0 <= minutes <= 65535:
-                    return "00:00"
-                return "%02d:%02d" % divmod(minutes, 60)
-            except Exception:
-                pass
+            #try:
+            #    if not 0 <= minutes <= 65535:
+            #        return "00:00"
+            #    return "%02d:%02d" % divmod(minutes, 60)
+            #except Exception:
+            #    pass
         if self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('remainingClimatisationTimeInMinutes', False):
             minutes = self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('remainingClimatisationTimeInMinutes', 0)
-            try:
-                if not 0 <= minutes <= 65535:
-                    return "00:00"
-                return "%02d:%02d" % divmod(minutes, 60)
-            except Exception:
-                pass
-        return "00:00"
+            #try:
+            #    if not 0 <= minutes <= 65535:
+            #        return "00:00"
+            #    return "%02d:%02d" % divmod(minutes, 60)
+            #except Exception:
+            #    pass
+        #return "00:00"
+        return minutes
 
     @property
     def is_climatisation_time_left_supported(self) -> bool:
         """Return true if remainingTimeToReachTargetTemperatureInSeconds is supported."""
-        if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('remainingClimatisationTimeInMinutes', False):
-            return True
+        if self.attrs.get('climater', False):
+            if 'remainingClimatisationTimeInMinutes' in self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}):
+                return True
         # If auxiliaryHeating is present, then is_climatisation_time_left_supported() is also True
-        if self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('remainingClimatisationTimeInMinutes', False):
-            return True
+        if self.attrs.get('climater', False):
+            if 'remainingClimatisationTimeInMinutes' in self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}):
+                return True
         return False
 
     @property
@@ -2659,10 +2840,9 @@ class Vehicle:
         """Return status of auxiliary climatisation."""
         if self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('climatisationState', False):
             status = self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('climatisationState', '')
-            if status in ['heating', 'cooling', 'on']: 
+            if status in ['heatingAuxiliary','preheating', 'heating', 'cooling', 'on', 'On']: 
                 return True
-        else:
-            return False
+        return False
 
     @property
     def is_auxiliary_climatisation_supported(self) -> bool:
@@ -3015,7 +3195,7 @@ class Vehicle:
 
     # Climatisation timers
     @property
-    def climatisationTimer1(self):
+    def climatisation_timer1(self):
         """Return climatisation timer status and attributes."""
         if self.attrs.get('climatisationTimers', False):
             try:
@@ -3029,14 +3209,14 @@ class Vehicle:
         return None
 
     @property
-    def is_climatisationTimer1_supported(self) -> bool:
+    def is_climatisation_timer1_supported(self) -> bool:
         """Return true if climatisation timer 1 is supported."""
         if len(self.attrs.get('climatisationTimers', {}).get('timers', [])) >= 1:
             return True
         return False
 
     @property
-    def climatisationTimer2(self):
+    def climatisation_timer2(self):
         """Return climatisation timer status and attributes."""
         if self.attrs.get('climatisationTimers', False):
             try:
@@ -3050,14 +3230,14 @@ class Vehicle:
         return None
 
     @property
-    def is_climatisationTimer2_supported(self) -> bool:
+    def is_climatisation_timer2_supported(self) -> bool:
         """Return true if climatisation timer 2 is supported."""
         if len(self.attrs.get('climatisationTimers', {}).get('timers', [])) >= 2:
             return True
         return False
 
     @property
-    def climatisationTimer3(self):
+    def climatisation_timer3(self):
         """Return climatisation timer status and attributes."""
         if self.attrs.get('climatisationTimers', False):
             try:
@@ -3071,7 +3251,7 @@ class Vehicle:
         return None
 
     @property
-    def is_climatisationTimer3_supported(self) -> bool:
+    def is_climatisation_timer3_supported(self) -> bool:
         """Return true if climatisation timer 3 is supported."""
         if len(self.attrs.get('climatisationTimers', {}).get('timers', [])) >= 3:
             return True
@@ -3545,6 +3725,10 @@ class Vehicle:
         """Return True, if vehicle supports area alarm (always True at the moment)"""
         # Always True at the moment. Have to check, if the geofence capability is a necessary condition
         return True
+        #if self._relevantCapabilties.get('geofence', {}).get('active', False):
+        #    return True
+        #else:
+        #    return False
 
     #  Status of set data requests
     @property
@@ -3632,12 +3816,11 @@ class Vehicle:
     @property
     def refresh_data(self) -> bool:
         """Get state of data refresh"""
-        #if self._requests.get('refresh', {}).get('id', False):
-        #    timestamp = self._requests.get('refresh', {}).get('timestamp', DATEZERO)
-        #    expired = datetime.now() - timedelta(minutes=2)
-        #    if expired < timestamp:
-        #        return True
-        #State is always false
+        if self._requests.get('refresh', {}).get('id', False):
+            timestamp = self._requests.get('refresh', {}).get('timestamp', DATEZERO)
+            expired = datetime.now() - timedelta(minutes=2)
+            if expired < timestamp:
+                return True
         return False
 
     @property
@@ -3902,7 +4085,7 @@ class Vehicle:
                 _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last update of departure timers was at {self._last_get_departure_timers}. So no need to update.')
                 # Wait 5 seconds
                 await asyncio.sleep(5)
-        elif type ==  'departure-profiles-updated': # !!! Is this the right type?
+        elif type ==  'departure-profile-updated': # !!! Is this the right type?
             if self._requests.get('departureprofile', {}).get('id', None):
                 openRequest= self._requests.get('departureprofile', {}).get('id', None)
                 if openRequest == requestId:
@@ -3917,7 +4100,7 @@ class Vehicle:
                 _LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last update of departure profiles was at {self._last_get_departure_profiles}. So no need to update.')
                 # Wait 5 seconds
                 await asyncio.sleep(5)
-        elif type in  ('climatisation-timers-changed', 'climatisation-timers-updated'): 
+        elif type in  ('climatisation-timers-changed', 'climatisation-timers-updated', 'auxiliary-heating-timers-updated', 'auxiliary-heating-timers-changed'): 
             if self._requests.get('climatisationtimer', {}).get('id', None):
                 openRequest= self._requests.get('climatisationtimer', {}).get('id', None)
                 if openRequest == requestId:
@@ -3950,7 +4133,7 @@ class Vehicle:
                 await asyncio.sleep(5)
         elif type in ('climatisation-status-changed','climatisation-started', 'climatisation-stopped', 'climatisation-settings-updated', 'climatisation-error-fail',
                       'climatisation-settings-changed', 'climatisation-window-heating-started', 'climatisation-window-heating-stopped',
-                      'climatisation-window-heating-start-failed', 'climatisation-window-heating-stop-failed'):
+                      'climatisation-window-heating-start-failed', 'climatisation-window-heating-stop-failed', 'auxiliary-heating-started', 'auxiliary-heating-stopped'):
             if self._requests.get('climatisation', {}).get('id', None):
                 openRequest= self._requests.get('climatisation', {}).get('id', None)
                 if openRequest == requestId:
@@ -4008,7 +4191,7 @@ class Vehicle:
                     _LOGGER.debug(f'The notification closes an open request initiated by PyCupra.')
                     self._requests.get('refresh', {}).pop('id')
             # Nothing else to do
-        elif type in ('vehicle-area-alert-added', 'vehicle-area-alert-updated'):
+        elif type in ('vehicle-area-alert-added', 'vehicle-area-alert-updated', 'access-status-changed', 'rah-or-rav-status-changed'):
             _LOGGER.info(f'   Intentionally ignoring a notification of type \'{type}\')')
         else:
             _LOGGER.warning(f'   Don\'t know what to do with a notification of type \'{type}\'. Please open an issue.)')

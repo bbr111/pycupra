@@ -86,7 +86,7 @@ TOKEN_HEADERS = {
         'Connection': 'keep-alive',
         'Accept-Encoding': 'gzip',
         'User-Agent': USER_AGENT_SEAT,
-        'app-version': '2.5.0',
+        'app-version': '2.10.0',
         'app-brand': 'seat',
         'app-market': 'android',
         #'User-ID': '?????', # to be set later
@@ -103,7 +103,7 @@ TOKEN_HEADERS = {
         'Connection': 'keep-alive',
         'Accept-Encoding': 'gzip',
         'User-Agent': USER_AGENT_CUPRA,
-        'app-version': '2.5.0',
+        'app-version': '2.10.0',
         'app-brand': 'cupra',
         'app-market': 'android',
         #'User-ID': '?????', # to be set later
@@ -127,7 +127,7 @@ API_MBB_STATUSDATA = 'https://customer-profile.vwgroup.io/v3/customers/{self._us
 API_PERSONAL_DATA= 'https://customer-profile.vwgroup.io/v3/customers/{self._user_id}/personalData'
 #Other option for personal data is '{baseurl}/v1/users/{self._user_id}'
 
-API_VEHICLES = '{APP_URI}/v3/users/{self._user_id}/garage/vehicles'                                  # Garage info
+API_VEHICLES = '{APP_URI}/v2/users/{self._user_id}/garage/vehicles'                                  # Garage info
 API_MYCAR = '{baseurl}/v5/users/{self._user_id}/vehicles/{vin}/mycar'                                # Vehicle status report
 API_CHARGING = '{baseurl}/v1/vehicles/{vin}/charging'                                                # Vehicle charging information 
 API_CHARGING_PROFILES = '{baseurl}/vehicles/{vin}/charging/profiles'                                 # Vehicle charging profile information 

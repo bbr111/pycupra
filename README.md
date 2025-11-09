@@ -33,7 +33,7 @@ No licence, public domain, no guarantees, feel free to use for anything. Please 
 ### Example
 
 For an extensive example, please use the code found in example/PyCupra.py.
-When logged in the library will automatically create a vehicle object for every car registered to the account. Initially no data is fetched at all. Use the doLogin method and it will signin with the credentials used for the class constructor. After a successful login, the tokens are stored in a json file. Later doLogin calls can use the token file instead of the credentials.
+When logged in the library will automatically create a vehicle object for every car registered to the account. Initially no data is fetched at all. Use the doLogin method and it will sign in with the credentials used for the class constructor. After a successful login, the tokens are stored in a json file. Later doLogin calls can use the token file instead of the credentials.
 Method get_vehicles will fetch vehicle basic information and create Vehicle class objects for all associated vehicles in account.
 To update all available data use the update_all method of the Connect class. This will call the update function for all registered vehicles, which in turn will fetch data from all available API endpoints.
 

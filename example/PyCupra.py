@@ -40,6 +40,7 @@ COMPONENTS = {
     'lock': 'lock',
     'device_tracker': 'device_tracker',
     'switch': 'switch',
+    'button': 'button',
 }
 
 RESOURCES = [
@@ -68,9 +69,9 @@ RESOURCES = [
 		"climatisation_time_left",
 		"combined_range",
 		"combustion_range",
-        "climatisationTimer1",
-        "climatisationTimer2",
-        "climatisationTimer3",
+        "climatisation_timer1",
+        "climatisation_timer2",
+        "climatisation_timer3",
         "departure1",
         "departure2",
         "departure3",
@@ -114,7 +115,7 @@ RESOURCES = [
         "slow_charge",
 		"sunroof_closed",
         "target_soc",
-		"trip_last_average_auxillary_consumption",
+		"trip_last_average_auxiliary_consumption",
 		"trip_last_average_electric_consumption",
 		"trip_last_average_fuel_consumption",
 		"trip_last_average_speed",
@@ -123,7 +124,7 @@ RESOURCES = [
 		"trip_last_length",
 		"trip_last_recuperation",
 		"trip_last_total_electric_consumption",
-		"trip_last_cycle_average_auxillary_consumption",
+		"trip_last_cycle_average_auxiliary_consumption",
 		"trip_last_cycle_average_electric_consumption",
 		"trip_last_cycle_average_fuel_consumption",
 		"trip_last_cycle_average_speed",
@@ -230,8 +231,8 @@ async def demo_set_timer_schedule(vehicle):
         schedule = {                                               # Set the departure time, date and periodicity
             "enabled": False,                                       # Set the timer active or not, True or False, required
             "recurring": False,                                    # True or False for recurring, required
-            "date": "2025-11-01",                                  # Date for departure, required if recurring=False
-            "time": "12:34",                                       # Time for departure, required
+            "date": "2025-11-10",                                  # Date for departure, required if recurring=False
+            "time": "13:45",                                       # Time for departure, required
             "days": "nyynnnn",                                     # Days (mon-sun) for recurring schedule (n=disable, y=enable), required if recurring=True
             "nightRateActive": True,                               # True or False Off-peak hours, optional
             "nightRateStart": "23:00",                             # Off-peak hours start (HH:mm), optional
@@ -289,14 +290,34 @@ async def demo_set_climatisation_timer_schedule(vehicle):
     print('########################################')
     print('#    Change one climatisation timer    #')
     print('########################################')
-    success= await vehicle.set_climatisation_timer_schedule(id = 1,                             # id = 1, 2
+    success= await vehicle.set_climatisation_timer_schedule(id = 2,                             # id = 1, 2
         schedule = {                                               # Set the departure time, date and periodicity
             "enabled": False,                                       # Set the timer active or not, True or False, required
-            "recurring": True,                                     # True or False for recurring, required
-            "time": "12:34",                                       # Time for departure, required
+            "recurring": False,                                     # True or False for recurring, required
+            "date": "2025-11-12",                                  # Date for departure, required if recurring=False
+            "time": "02:56",                                       # Time for departure, required
             "days": "nyynnnn",                                     # Days (mon-sun) for recurring schedule (n=disable, y=enable), required if recurring=True
             }
         )
+    if success:
+        print("   Request completed successfully.")
+    else:
+        print("   Request failed.")
+    return success
+
+async def demo_set_auxiliary_heating_timer_schedule(vehicle, spin='1234'):
+    print('########################################')
+    print('#    Change one climatisation timer    #')
+    print('########################################')
+    success= await vehicle.set_auxiliary_heating_timer_schedule(id = 1,                             # id = 1, 2
+        schedule = {                                               # Set the departure time, date and periodicity
+            "enabled": False,                                       # Set the timer active or not, True or False, required
+            "recurring": False,                                     # True or False for recurring, required
+            "date": "2025-11-10",                                  # Date for departure, required if recurring=False
+            "time": "07:00",                                       # Time for departure, required
+            "days": "nyynnnn",                                     # Days (mon-sun) for recurring schedule (n=disable, y=enable), required if recurring=True
+            }
+        , spin=spin)
     if success:
         print("   Request completed successfully.")
     else:
@@ -319,6 +340,17 @@ async def demo_set_climatisation_timer_active(vehicle, id=1, action="off"):
     print('# (De-)Activate one climatisation timer#')
     print('########################################')
     success= await vehicle.set_climatisation_timer_active(id, action)                # id = 1, 2 action = "on" or "off".
+    if success:
+        print("   Request completed successfully.")
+    else:
+        print("   Request failed.")
+    return success
+
+async def demo_set_auxiliary_heating_timer_active(vehicle, id=1, action="off", spin='1234'):
+    print('########################################')
+    print('# (De-)Activate one aux. heating timer #')
+    print('########################################')
+    success= await vehicle.set_auxiliary_heating_timer_active(id, action, spin)                # id = 1, 2 action = "on" or "off".
     if success:
         print("   Request completed successfully.")
     else:
@@ -624,6 +656,9 @@ async def main():
             #    settingName = 'targetTemperatureInCelsius', value = 18.0)              # set climatisation temperature 
             #await demo_set_climatisation_one_setting(vehicle, 'zoneFrontRightEnabled', True) # enable/disable zone front right in climatisation settings 
             #await demo_set_climatisation_one_setting(vehicle, 'climatisationWithoutExternalPower', False) # enable/disable climatisation without external power 
+
+            #await demo_set_auxiliary_heating_timer_active(vehicle, id=1, action="off", spin='1234')      # id = 1, 2, action = "on" or "off".
+            await demo_set_auxiliary_heating_timer_schedule(vehicle, spin='1234')                       # arguments id and schedule can be found in the demo function
 
             #await demo_set_climatisation_timer_active(vehicle, id=1, action="off")      # id = 1, 2, action = "on" or "off".
             #await demo_set_climatisation_timer_schedule(vehicle)                       # arguments id and schedule can be found in the demo function

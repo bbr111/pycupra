@@ -234,7 +234,7 @@ class Connection:
 
             with open(file_path, "wb") as f:
                 f.write(imageData)
-            imageDict[imageName]=f'/local/image_{vin}_{imageName}.png'
+            imageDict[imageName]=f'/local/pycupra/image_{vin}_{imageName}.png'
             #_LOGGER.debug(f"Saved image: {file_path}") # Contains the vin, so should be commented out
             f.close()
             return True
@@ -1255,7 +1255,7 @@ class Connection:
         await self.set_token(self._session_auth_brand)
         try:
             response = await self.get(eval(f"f'{API_CLIMATER_STATUS}'"))
-            if response.get('climatisationStatus', {}):
+            if response.get('climatisationStatus', {}) or response.get('auxiliaryHeatingStatus', {}):
                 data['climater']['status']=response
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch climatisation status, HTTP status code: {response.get("status_code")}')
@@ -1574,8 +1574,13 @@ class Connection:
             elif mode == "start": # Start climatisation
                 return await self._setViaAPI(eval(f"f'{API_CLIMATER}/start'"), json = data)
             elif mode == "auxiliary_start": # Start auxiliary climatisation
-                return await self._setViaAPI(eval(f"f'{API_AUXILIARYHEATING}/start'"), json = data)
-            elif mode == "auxiliary": # Stop auxiliary climatisation
+                # Fetch security token 
+                self._session_headers['SecToken']= await self.get_sec_token(spin=spin, baseurl=baseurl)
+                response = await self._setViaAPI(eval(f"f'{API_AUXILIARYHEATING}/start'"), json = data)
+                # Clean up headers
+                self._session_headers.pop('SecToken')
+                return response
+            elif mode == "auxiliary_stop": # Stop auxiliary climatisation
                 return await self._setViaAPI(eval(f"f'{API_AUXILIARYHEATING}/stop'"))
             else: # Unknown modes
                 _LOGGER.error(f'Unbekannter setClimater mode: {mode}. Command ignored')
@@ -1584,12 +1589,31 @@ class Connection:
             raise
         return False
 
-    async def setClimatisationtimer(self, vin, baseurl, data, spin) -> dict | bool:
+    async def setClimatisationtimer(self, vin, baseurl, data) -> dict | bool:
         """Set climatisation timers."""
         try:
             capability = 'climatisation'
             url= eval(f"f'{API_REQUESTS}/timers'")
             return await self._setViaPUTtoAPI(url, json = data)
+        except:
+            raise
+        return False
+
+    async def setAuxiliaryheatingtimer(self, vin, baseurl, data, spin) -> dict | bool:
+        """Set climatisation timers."""
+        try:
+            capability = 'auxiliary-heating'
+            url= eval(f"f'{API_AUXILIARYHEATING}/timers'")
+            
+            # Fetch security token 
+            self._session_headers['SecToken']= await self.get_sec_token(spin=spin, baseurl=baseurl)
+
+            response = await self._setViaAPI(url, json = data)
+            
+            # Clean up headers
+            self._session_headers.pop('SecToken')
+            
+            return response
         except:
             raise
         return False

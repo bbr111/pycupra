@@ -3,7 +3,7 @@
 
 import logging
 from datetime import datetime
-from .utilities import camel2slug
+from .utilities import camel2slug, convertTimerUtcToLocal
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -210,6 +210,17 @@ class Switch(Instrument):
     @property
     def assumed_state(self) -> bool:
         return True
+
+class Button(Instrument):
+    def __init__(self, attr, name, icon):
+        super().__init__(component="button", attr=attr, name=name, icon=icon)
+
+    @property
+    def is_mutable(self) -> bool:
+        return True
+
+    def press(self):
+        pass
 
 
 class Climate(Instrument):
@@ -450,14 +461,18 @@ class RequestRefresh(Switch):
 
     @property
     def state(self):
-        return self.vehicle.refresh_data
+        if self.vehicle.refresh_data != None:
+            status = self.vehicle.refresh_data
+            if status:
+                return True
+        return False #self.vehicle.refresh_data
 
     async def turn_on(self) -> None:
         _LOGGER.debug('User has called RequestRefresh().')
         await self.vehicle.set_refresh()
         #await self.vehicle.update(updateType=1) #full update after set_refresh
-        if self.callback is not None:
-            self.callback()
+        #if self.callback is not None:
+        #    self.callback()
 
     async def turn_off(self) -> None:
         pass
@@ -469,7 +484,6 @@ class RequestRefresh(Switch):
     @property
     def attributes(self) -> dict:
         return dict(last_result = self.vehicle.refresh_action_status)
-
 
 class RequestUpdate(Switch):
     def __init__(self):
@@ -495,6 +509,44 @@ class RequestUpdate(Switch):
     #@property
     #def attributes(self):
     #    return dict()
+
+
+class RequestUpdateButton(Button): #RequestUpdate as a button (because some users prefer a button)
+    def __init__(self):
+        super().__init__(attr="update_data_button", name="Request full update button", icon="mdi:timer-refresh")
+
+    async def press(self) -> None:
+        _LOGGER.debug('User has called RequestUpdateButton().')
+        await self.vehicle.update(updateType=1) #full update after set_refresh
+        if self.callback is not None:
+            self.callback()
+
+    @property
+    def is_supported(self):
+        supported = 'is_update_data_supported'
+        if hasattr(self.vehicle, supported):
+            return getattr(self.vehicle, supported)
+        else:
+            return False
+
+class RequestRefreshButton(Button): #RequestRefresh as a button (because some users prefer a button)
+    def __init__(self):
+        super().__init__(attr="refresh_data_button", name="Request wakeup vehicle button", icon="mdi:car-connected")
+
+    async def press(self) -> None:
+        _LOGGER.debug('User has called RequestRefreshButton().')
+        await self.vehicle.set_refresh()
+        #await self.vehicle.update(updateType=1) #full update after set_refresh
+        #if self.callback is not None:
+        #    self.callback()
+
+    @property
+    def is_supported(self):
+        supported = 'is_refresh_data_supported'
+        if hasattr(self.vehicle, supported):
+            return getattr(self.vehicle, supported)
+        else:
+            return False
 
 
 class ElectricClimatisation(Switch):
@@ -540,11 +592,11 @@ class AuxiliaryClimatisation(Switch):
         return self.vehicle.auxiliary_climatisation
 
     async def turn_on(self) -> None:
-        await self.vehicle.set_climatisation(mode = 'auxiliary_start') #, spin = self.spin)
+        await self.vehicle.set_climatisation(mode = 'auxiliary_start', spin = self.spin)
         #await self.vehicle.update()
 
     async def turn_off(self) -> None:
-        await self.vehicle.set_climatisation(mode = 'auxiliay_stop')
+        await self.vehicle.set_climatisation(mode = 'auxiliary_stop')
         #await self.vehicle.update()
 
     @property
@@ -923,25 +975,31 @@ class ChargingBatteryCare(Switch):
 
 class ClimatisationTimer1(Switch):
     def __init__(self):
-        super().__init__(attr="climatisationTimer1", name="Climatisation timer 1", icon="mdi:radiator")
+        super().__init__(attr="climatisation_timer1", name="Climatisation timer 1", icon="mdi:radiator")
 
     def configurate(self, **config):
         self.spin = config.get('spin', '')
 
     @property
     def state(self):
-        if self.vehicle.climatisationTimer1 != None:
-            status = self.vehicle.climatisationTimer1.get("enabled", "")
+        if self.vehicle.climatisation_timer1 != None:
+            status = self.vehicle.climatisation_timer1.get("enabled", "")
             if status:
                 return True
         return False
 
     async def turn_on(self):
-        await self.vehicle.set_climatisationTimer_active(id=1, action="on")
+        if self.vehicle._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
+            await self.vehicle.set_climatisation_timer_active(id=1, action="on")
+        else:
+            await self.vehicle.set_auxiliary_heating_timer_active(id=1, action="on", spin=self.spin)
         #await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.set_climatisationTimer_active(id=1, action="off")
+        if self.vehicle._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
+            await self.vehicle.set_climatisation_timer_active(id=1, action="off")
+        else:
+            await self.vehicle.set_auxiliary_heating_timer_active(id=1, action="off", spin=self.spin)
         #await self.vehicle.update()
 
     @property
@@ -950,29 +1008,35 @@ class ClimatisationTimer1(Switch):
 
     @property
     def attributes(self):
-        return dict(self.vehicle.climatisationTimer1)
+        return dict(self.vehicle.climatisation_timer1)
 
 class ClimatisationTimer2(Switch):
     def __init__(self):
-        super().__init__(attr="climatisationTimer2", name="Climatisation timer 2", icon="mdi:radiator")
+        super().__init__(attr="climatisation_timer2", name="Climatisation timer 2", icon="mdi:radiator")
 
     def configurate(self, **config):
         self.spin = config.get('spin', '')
 
     @property
     def state(self):
-        if self.vehicle.climatisationTimer2 != None:
-            status = self.vehicle.climatisationTimer2.get("enabled", "")
+        if self.vehicle.climatisation_timer2 != None:
+            status = self.vehicle.climatisation_timer2.get("enabled", "")
             if status:
                 return True
         return False
 
     async def turn_on(self):
-        await self.vehicle.set_climatisationTimer_active(id=2, action="on")
+        if self.vehicle._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
+            await self.vehicle.set_climatisation_timer_active(id=2, action="on")
+        else:
+            await self.vehicle.set_auxiliary_heating_timer_active(id=2, action="on", spin=self.spin)
         #await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.set_climatisationTimer_active(id=2, action="off")
+        if self.vehicle._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
+            await self.vehicle.set_climatisation_timer_active(id=2, action="off")
+        else:
+            await self.vehicle.set_auxiliary_heating_timer_active(id=2, action="off", spin=self.spin)
         #await self.vehicle.update()
 
     @property
@@ -981,29 +1045,35 @@ class ClimatisationTimer2(Switch):
 
     @property
     def attributes(self):
-        return dict(self.vehicle.climatisationTimer2)
+        return dict(self.vehicle.climatisation_timer2)
 
 class ClimatisationTimer3(Switch):
     def __init__(self):
-        super().__init__(attr="climatisationTimer3", name="Climatisation timer 3", icon="mdi:radiator")
+        super().__init__(attr="climatisation_timer3", name="Climatisation timer 3", icon="mdi:radiator")
 
     def configurate(self, **config):
         self.spin = config.get('spin', '')
 
     @property
     def state(self):
-        if self.vehicle.climatisationTimer3 != None:
-            status = self.vehicle.climatisationTimer3.get("enabled", "")
+        if self.vehicle.climatisation_timer3 != None:
+            status = self.vehicle.climatisation_timer3.get("enabled", "")
             if status:
                 return True
         return False
 
     async def turn_on(self):
-        await self.vehicle.set_climatisationTimer_active(id=3, action="on")
+        if self.vehicle._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
+            await self.vehicle.set_climatisation_timer_active(id=3, action="on")
+        else:
+            await self.vehicle.set_auxiliary_heating_timer_active(id=3, action="on", spin=self.spin)
         #await self.vehicle.update()
 
     async def turn_off(self):
-        await self.vehicle.set_climatisationTimer_active(id=3, action="off")
+        if self.vehicle._relevantCapabilties.get('climatisationTimers', {}).get('active', False):
+            await self.vehicle.set_climatisation_timer_active(id=3, action="off")
+        else:
+            await self.vehicle.set_auxiliary_heating_timer_active(id=3, action="off", spin=self.spin)
         #await self.vehicle.update()
 
     @property
@@ -1012,7 +1082,7 @@ class ClimatisationTimer3(Switch):
 
     @property
     def attributes(self):
-        return dict(self.vehicle.climatisationTimer3)
+        return dict(self.vehicle.climatisation_timer3)
 
 class DepartureTimer1(Switch):
     def __init__(self):
@@ -1140,7 +1210,7 @@ class DepartureProfile1(Switch):
 
     @property
     def attributes(self):
-        return dict(self.vehicle.departure_profile1)
+        return dict(convertTimerUtcToLocal(self.vehicle.departure_profile1))
 
 class DepartureProfile2(Switch):
     def __init__(self):
@@ -1171,7 +1241,7 @@ class DepartureProfile2(Switch):
 
     @property
     def attributes(self):
-        return dict(self.vehicle.departure_profile2)
+        return dict(convertTimerUtcToLocal(self.vehicle.departure_profile2))
 
 class DepartureProfile3(Switch):
     def __init__(self):
@@ -1202,7 +1272,7 @@ class DepartureProfile3(Switch):
 
     @property
     def attributes(self):
-        return dict(self.vehicle.departure_profile3)
+        return dict(convertTimerUtcToLocal(self.vehicle.departure_profile3))
 
 
 class RequestResults(Sensor):
@@ -1287,6 +1357,8 @@ def create_instruments():
         RequestHonkAndFlash(),
         RequestRefresh(),
         RequestUpdate(),
+        RequestRefreshButton(),
+        RequestUpdateButton(),
         WindowHeater(),
         BatteryClimatisation(),
         ClimatisationSettingZoneFrontLeft(),
@@ -1461,7 +1533,7 @@ def create_instruments():
             attr="climatisation_time_left",
             name="Climatisation time left",
             icon="mdi:clock",
-            unit="h",
+            unit="min",
             device_class="duration"
         ),
         Sensor(
