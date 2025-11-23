@@ -74,7 +74,7 @@ class Vehicle:
 
         self._relevantCapabilties = {
             'measurements': {'active': False, 'reason': 'not supported', },
-            'climatisation': {'active': False, 'reason': 'not supported'},
+            'climatisation': {'active': False, 'reason': 'not supported', 'supportsOffGridClimatisation': False},
             'tripStatistics': {'active': False, 'reason': 'not supported', 'supportsCyclicTrips': False},
             'vehicleHealthInspection': {'active': False, 'reason': 'not supported'},
             'vehicleHealthWarnings': {'active': False, 'reason': 'not supported'},
@@ -91,7 +91,7 @@ class Vehicle:
             'climatisationTimers': {'active': False, 'reason': 'not supported'},
             'ignition': {'active': False, 'reason': 'not supported'},
             'vehicleLights': {'active': False, 'reason': 'not supported'},
-            'auxiliaryHeating': {'active': False, 'reason': 'not supported'},
+            'auxiliaryHeating': {'active': False, 'reason': 'not supported', 'supportsTargetTemperatureInStartAuxiliaryHeating': False},
             'geofence': {'active': False, 'reason': 'not supported'},
         }
 
@@ -139,6 +139,8 @@ class Vehicle:
                             data['supportsVehiclePositionedInProfileID']=True
                         if capa['parameters'].get('supportsTimerClimatisation',False)==True or capa['parameters'].get('supportsTimerClimatisation',False)=='true':
                             data['supportsTimerClimatisation']=True
+                        if capa['parameters'].get('supportsOffGridClimatisation',False)==True or capa['parameters'].get('supportsOffGridClimatisation',False)=='true':
+                            data['supportsOffGridClimatisation']=True
                         if capa['parameters'].get('supportsStartParallelClimatisationWindowHeating',False)==True or capa['parameters'].get('supportsStartParallelClimatisationWindowHeating',False)=='true':
                             data['supportsStartParallelClimatisationWindowHeating']=True
                         if capa['parameters'].get('supportsTargetTemperatureInStartAuxiliaryHeating',False)==True or capa['parameters'].get('supportsTargetTemperatureInStartAuxiliaryHeating',False)=='true':
@@ -1197,11 +1199,12 @@ class Vehicle:
     async def set_climatisation(self, mode = 'off', temp = None, hvpower = None, spin = None) -> bool:
         """Turn on/off climatisation with electric/auxiliary heater."""
         data = {}
+        modeLc = mode.lower()
         # Validate user input
-        if mode.lower() not in ['electric', 'auxiliary_start', 'auxiliary_stop', 'start', 'stop', 'on', 'off']:
+        if modeLc not in ['electric', 'auxiliary_start', 'auxiliary_stop', 'start', 'stop', 'on', 'off']:
             _LOGGER.error(f"Invalid mode for 'set_climatisation': {mode}")
             raise SeatInvalidRequestException(f"Invalid mode for set_climatisation: {mode}")
-        elif mode == 'auxiliary' and spin is None:
+        elif modeLc == 'auxiliary' and spin is None:
             raise SeatInvalidRequestException("Starting auxiliary heater requires provided S-PIN")
         if temp is not None:
             if not isinstance(temp, float) and not isinstance(temp, int):
@@ -1216,9 +1219,9 @@ class Vehicle:
         #        raise SeatInvalidRequestException(f"Invalid type for hvpower")
         if self.is_electric_climatisation_supported or self.is_auxiliary_climatisation_supported:
             if self._relevantCapabilties.get('climatisation', {}).get('active', False) or self._relevantCapabilties.get('auxiliaryHeating', {}).get('active', False):
-                if mode in ['Start', 'start', 'Electric', 'electric', 'On', 'on']:
-                    mode = 'start'
-                if mode in ['start', 'auxiliary_start']:
+                if modeLc in ['start', 'electric', 'on']:
+                    modeLc = 'start'
+                if modeLc in ['start', 'auxiliary_start']:
                     #if hvpower is not None:
                     #    withoutHVPower = hvpower
                     #else:
@@ -1227,19 +1230,22 @@ class Vehicle:
                             'targetTemperature': temp,
                             'targetTemperatureUnit': 'celsius',
                     }
-                    if mode == 'auxiliary_start':
-                        data['targetTemperature'] = int(temp) # auxiliary heating only supports integer temperature values
-                    return await self._set_climater(mode, data, spin)
+                    if modeLc == 'auxiliary_start':
+                        if self._relevantCapabilties.get('auxiliaryHeating', {}).get('supportsTargetTemperatureInStartAuxiliaryHeating', False):
+                            data['targetTemperature'] = int(temp) # auxiliary heating only supports integer temperature values
+                        else:
+                            data = {}
+                    return await self._set_climater(modeLc, data, spin)
                 else:
-                    if mode=='auxiliary_stop' and (self._requests['climatisation'].get('id', False) or self.auxiliary_climatisation):
+                    if modeLc=='auxiliary_stop' and (self._requests['climatisation'].get('id', False) or self.auxiliary_climatisation):
                         request_id=self._requests.get('climatisation', 0)
                         data={}
-                        return await self._set_climater(mode, data, spin)
+                        return await self._set_climater(modeLc, data, spin)
                     elif self._requests['climatisation'].get('id', False) or self.electric_climatisation:
                         request_id=self._requests.get('climatisation', 0)
-                        mode = 'stop'
+                        modeLc = 'stop'
                         data={}
-                        return await self._set_climater(mode, data, spin)
+                        return await self._set_climater(modeLc, data, spin)
                     else:
                         _LOGGER.error('Can not stop climatisation because no running request was found')
                         return False
@@ -2783,7 +2789,9 @@ class Vehicle:
         if self.attrs.get('climater', False):
             if 'settings' in self.attrs.get('climater', {}):
                 if 'climatisationWithoutExternalPower' in self.attrs.get('climater', {})['settings']:
-                    return True
+                    if self._relevantCapabilties.get('climatisation', {}).get('supportsOffGridClimatisation', False):
+                        # only return true for vehicles, where 'supportsOffGridClimatisation'= True
+                        return True
         return False
 
     @property
@@ -3484,11 +3492,11 @@ class Vehicle:
             return False
 
     @property
-    def trip_last_average_auxillary_consumption(self):
+    def trip_last_average_auxiliary_consumption(self):
         return self.trip_last_entry.get('averageAuxConsumption')
 
     @property
-    def is_trip_last_average_auxillary_consumption_supported(self) -> bool:
+    def is_trip_last_average_auxiliary_consumption_supported(self) -> bool:
         response = self.trip_last_entry
         if response and type(response.get('averageAuxConsumption', None)) in (float, int):
             return True
@@ -3616,11 +3624,11 @@ class Vehicle:
             return False
 
     @property
-    def trip_last_cycle_average_auxillary_consumption(self):
+    def trip_last_cycle_average_auxiliary_consumption(self):
         return self.trip_last_cycle_entry.get('averageAuxConsumption')
 
     @property
-    def is_trip_last_cycle_average_auxillary_consumption_supported(self) -> bool:
+    def is_trip_last_cycle_average_auxiliary_consumption_supported(self) -> bool:
         response = self.trip_last_cycle_entry
         if response and type(response.get('averageAuxConsumption', None)) in (float, int):
             return True
@@ -4116,7 +4124,7 @@ class Vehicle:
                 # Wait 5 seconds
                 await asyncio.sleep(5)
         elif type in ('charging-status-changed', 'charging-started', 'charging-stopped', 'charging-settings-updated', 'charging-charge-mode-changed', 'charging-settings-changed',
-                      'charging-event-status-started', 'charging-finished'):
+                      'charging-event-status-started', 'charging-finished', 'charging-profile-changed'):
             if self._requests.get('batterycharge', {}).get('id', None):
                 openRequest= self._requests.get('batterycharge', {}).get('id', None)
                 if openRequest == requestId:

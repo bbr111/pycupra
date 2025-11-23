@@ -371,6 +371,8 @@ class Connection:
                         raise SeatLoginFailedException(errorTxt)
                     if 'terms-and-conditions' in location:
                         raise SeatEULAException('The terms and conditions must be accepted first at your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/"')
+                    #if 'consent' in location:
+                    #    raise SeatMarketingConsentException('The question to consent to marketing must be answered first at your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/"')
                     if 'user_id' in location: # Get the user_id which is needed for some later requests
                         self._user_id=parse_qs(urlparse(location).query).get('user_id', [''])[0]
                         self.addToAnonymisationDict(self._user_id,'[USER_ID_ANONYMISED]')
@@ -391,6 +393,7 @@ class Connection:
                     if maxDepth == 0:
                         raise SeatException('Too many redirects')
             except (SeatException, SeatEULAException, SeatAuthenticationException, SeatAccountLockedException, SeatLoginFailedException):
+                _LOGGER.warning(f'Running into login problems with location={location}')
                 raise
             except Exception as e:
                 # If we get an unhandled exception it should be because we can't redirect to the APP_URI URL and thus we have our auth code
@@ -468,8 +471,11 @@ class Connection:
             loop = asyncio.get_running_loop()
             rt = await loop.run_in_executor(None, self.writeTokenFile, client)
         except (SeatEULAException):
-            _LOGGER.warning('Login failed, the terms and conditions might have been updated and need to be accepted. Login to  your local SEAT/Cupra site, e.g. "https://cupraofficial.se/" and accept the new terms before trying again')
+            _LOGGER.warning('Login failed, the terms and conditions might have been updated and need to be accepted. Login to  your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/" and accept the new terms before trying again')
             raise
+        #except (SeatMarketingConsentException):
+        #    _LOGGER.warning('Login failed, the marketing conditions might have been updated and need to be accepted or disagreed. Login to  your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/" and accept the new terms before trying again')
+        #    raise
         except (SeatAccountLockedException):
             _LOGGER.warning('Your account is locked, probably because of too many incorrect login attempts. Make sure that your account is not in use somewhere with incorrect password')
             raise
@@ -1269,6 +1275,8 @@ class Connection:
                 data['climater']['settings']=response
             elif response.get('status_code', {}):
                 _LOGGER.warning(f'Could not fetch climatisation settings, HTTP status code: {response.get("status_code")}')
+            elif response.get('carCapturedTimestamp', {}):
+                _LOGGER.info('API returned no climatisation settings for the vehicle, just a timestamp')
             else:
                 _LOGGER.info('Unhandled error while trying to fetch climatisation settings')
         except Exception as error:
@@ -1854,6 +1862,8 @@ class Connection:
                     _LOGGER.debug(f'VW-Group API token refresh failed: {error.get("error_description", {})}')
                     #if client == 'vwg':
                     #    return await self._getAPITokens()
+                else:
+                    _LOGGER.debug(f'API token refresh failed. Error: {error}')
             else:
                 resp = await response.json()
                 _LOGGER.warning(f'Something went wrong when refreshing tokens for "{client}".')

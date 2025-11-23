@@ -688,7 +688,7 @@ class SeatHeating(Switch):
 
 class BatteryClimatisation(Switch):
     def __init__(self):
-        super().__init__(attr="climatisation_without_external_power", name="Climatisation from battery", icon="mdi:power-plug")
+        super().__init__(attr="climatisation_without_external_power", name="Climatisation setting off-grid climatisation", icon="mdi:battery-arrow-down")
 
     @property
     def state(self):
@@ -875,6 +875,9 @@ class SlowCharge(Switch):
 
     @property
     def state(self):
+        #if self.vehicle._requests.get('climatisation', {}).get('id', False):
+        #    _LOGGER.debug('A climatisation request is active. Setting the slow charge switch to unknown.')
+        #    return None
         return self.vehicle.slow_charge
 
     async def turn_on(self):
@@ -1585,15 +1588,15 @@ def create_instruments():
             device_class="energy_distance"
         ),
         Sensor(
-            attr="trip_last_average_auxillary_consumption",
-            name="Last trip average auxillary consumption",
+            attr="trip_last_average_auxiliary_consumption",
+            name="Last trip average auxiliary consumption",
             icon="mdi:flash",
             unit="kWh/100km",
             device_class="energy_distance"
         ),
         Sensor(
             attr="trip_last_average_aux_consumer_consumption",
-            name="Last trip average auxillary consumer consumption",
+            name="Last trip average auxiliary consumer consumption",
             icon="mdi:flash",
             unit="kWh/100km",
             device_class="energy_distance"
@@ -1626,8 +1629,8 @@ def create_instruments():
             unit="l/100km",
         ),
         Sensor(
-            attr="trip_last_cycle_average_auxillary_consumption",
-            name="Last cycle average auxillary consumption",
+            attr="trip_last_cycle_average_auxiliary_consumption",
+            name="Last cycle average auxiliary consumption",
             icon="mdi:flash",
             unit="kWh/100km",
             device_class="energy_distance"
@@ -1662,7 +1665,7 @@ def create_instruments():
         ),
         Sensor(
             attr="trip_last_cycle_average_aux_consumer_consumption",
-            name="Last cycle average auxillary consumer consumption",
+            name="Last cycle average auxiliary consumer consumption",
             icon="mdi:flash",
             unit="kWh/100km",
             device_class="energy_distance"

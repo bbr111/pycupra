@@ -383,7 +383,7 @@ async def demo_set_climatisation(vehicle, action="start", temp=18.0):
     print('########################################')
     print('#      Start/Stop climatisation        #')
     print('########################################')
-    success= await vehicle.set_climatisation(action, temp)            # mode = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
+    success= await vehicle.set_climatisation(action, temp)            # mode = "start", "auxiliary_start", "electric", "auxiliary_stop" or "off". temp is optional, spin is S-PIN and only needed for aux heating
     if success:
         print("   Request completed successfully.")
     else:
@@ -650,7 +650,7 @@ async def main():
             #await demo_set_charger_target_soc(vehicle, value=70)                      # value = 1-100
             #await demo_set_battery_care(vehicle, value=True)                           # value = False or True
 
-            #await demo_set_climatisation(vehicle, action = "start", temp=18.0)        # action = "auxilliary", "electric" or "off". spin is S-PIN and only needed for aux heating
+            await demo_set_climatisation(vehicle, action = "start", temp=18.0)        # action = "electric", "start", "auxiliary_start",  or "off". spin is S-PIN and only needed for aux heating
             #await demo_set_windowheating(vehicle, action = "stop")                    # action = "start" or "stop"
             #await demo_set_climatisation_one_setting(vehicle, 
             #    settingName = 'targetTemperatureInCelsius', value = 18.0)              # set climatisation temperature 
@@ -658,7 +658,7 @@ async def main():
             #await demo_set_climatisation_one_setting(vehicle, 'climatisationWithoutExternalPower', False) # enable/disable climatisation without external power 
 
             #await demo_set_auxiliary_heating_timer_active(vehicle, id=1, action="off", spin='1234')      # id = 1, 2, action = "on" or "off".
-            await demo_set_auxiliary_heating_timer_schedule(vehicle, spin='1234')                       # arguments id and schedule can be found in the demo function
+            #await demo_set_auxiliary_heating_timer_schedule(vehicle, spin='1234')                       # arguments id and schedule can be found in the demo function
 
             #await demo_set_climatisation_timer_active(vehicle, id=1, action="off")      # id = 1, 2, action = "on" or "off".
             #await demo_set_climatisation_timer_schedule(vehicle)                       # arguments id and schedule can be found in the demo function
