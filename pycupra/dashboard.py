@@ -1484,6 +1484,12 @@ def create_instruments():
             device_class="duration"
         ),
         Sensor(
+            attr="charging_estimated_end_time",
+            name="Charging estimated end time",
+            icon="mdi:battery-charging-100",
+            device_class="timestamp"
+        ),
+        Sensor(
             attr="charging_power",
             name="Charging power",
             icon="mdi:flash",
@@ -1538,6 +1544,12 @@ def create_instruments():
             icon="mdi:clock",
             unit="min",
             device_class="duration"
+        ),
+        Sensor(
+            attr="climatisation_estimated_end_time",
+            name="Climatisation estimated end time",
+            icon="mdi:clock",
+            device_class="timestamp"
         ),
         Sensor(
             attr="trip_last_average_speed",

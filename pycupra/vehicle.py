@@ -1340,8 +1340,10 @@ class Vehicle:
             data= deepcopy(self.attrs.get('climatisationTimers'))
             if len(data.get('timers', []))<1:
                 raise SeatInvalidRequestException(f'No timers found in climatisationTimers: {data}.')
-            data.pop('carCapturedTimestamp')
-            data.pop('timeInCar')
+            if data.get('carCapturedTimestamp',False):
+                data.pop('carCapturedTimestamp')
+            if data.get('timeInCar', False):
+                data.pop('timeInCar')
             idFound=False
             for e in range(len(data.get('timers', []))):
                 if data['timers'][e].get('id',-1)==id:
@@ -1422,8 +1424,10 @@ class Vehicle:
             data= deepcopy(self.attrs.get('climatisationTimers'))
             if len(data.get('timers', []))<1:
                 raise SeatInvalidRequestException(f'No timers found in climatisation timers: {data}.')
-            data.pop('carCapturedTimestamp')
-            data.pop('timeInCar')
+            if data.get('carCapturedTimestamp',False):
+                data.pop('carCapturedTimestamp')
+            if data.get('timeInCar', False):
+                data.pop('timeInCar')
             idFound=False
             for e in range(len(data.get('timers', []))):
                 if data['timers'][e].get('id',-1)==id:
@@ -2323,6 +2327,20 @@ class Vehicle:
         return self.is_charging_supported
 
     @property
+    def charging_estimated_end_time(self):
+        """Return estimated end of charging"""
+        if self.charging_time_left>0:
+            estimatedEnd = datetime.now(tz=None) + timedelta(minutes= self.charging_time_left)
+        else:
+            estimatedEnd = datetime.now(tz=None) - timedelta(days= 365)
+        return estimatedEnd.astimezone(tz=None)
+
+    @property
+    def is_charging_estimated_end_time_supported(self) -> bool:
+        """Return true if charging is supported"""
+        return self.is_charging_supported
+
+    @property
     def charging_power(self) -> int:
         """Return charging power in watts."""
         if self.attrs.get('charging', False):
@@ -2712,7 +2730,7 @@ class Vehicle:
 
     @property
     def is_climatisation_time_left_supported(self) -> bool:
-        """Return true if remainingTimeToReachTargetTemperatureInSeconds is supported."""
+        """Return true if remainingTimeToReachTargetTemperatureInMinutes is supported."""
         if self.attrs.get('climater', False):
             if 'remainingClimatisationTimeInMinutes' in self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}):
                 return True
@@ -2721,6 +2739,20 @@ class Vehicle:
             if 'remainingClimatisationTimeInMinutes' in self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}):
                 return True
         return False
+
+    @property
+    def climatisation_estimated_end_time(self):
+        """Return estimated end of climatisation"""
+        if self.climatisation_time_left>0:
+            estimatedEnd = datetime.now(tz=None) + timedelta(minutes= self.climatisation_time_left)
+        else:
+            estimatedEnd = datetime.now(tz=None) - timedelta(days= 365)
+        return estimatedEnd.astimezone(tz=None)
+
+    @property
+    def is_climatisation_estimated_end_time_supported(self) -> bool:
+        """Return true if remainingTimeToReachTargetTemperatureInMinutes is supported"""
+        return self.is_climatisation_time_left_supported
 
     @property
     def climatisation_zone_front_left(self):
