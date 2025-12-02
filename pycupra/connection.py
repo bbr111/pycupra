@@ -113,12 +113,19 @@ lib_version = importlib.metadata.version("pycupra")
 _LOGGER = logging.getLogger(__name__)
 BRAND_CUPRA = 'cupra'
 TIMEOUT = timedelta(seconds=90)
+loginInProgress = False
 
 class Connection:
     """ Connection to Connect services """
   # Init connection class
-    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, nightlyUpdateReduction=False, anonymise=True, tripStatisticsStartDate=None, **optional):
+    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, nightlyUpdateReduction=False, anonymise=True, tripStatisticsStartDate=None, logPrefix=None, **optional):
         """ Initialize """
+        self._logPrefix = logPrefix
+        if self._logPrefix!= None:
+            self._LOGGER= logging.getLogger(__name__+"_"+self._logPrefix)
+        else:
+            self._LOGGER = _LOGGER
+
         self._session = session
         self._lock = asyncio.Lock()
         self._session_fulldebug = fulldebug
@@ -144,8 +151,8 @@ class Connection:
         self._vehicles = []
         self._userData = {}
 
-        _LOGGER.info(f'Init PyCupra library, version {lib_version}')
-        _LOGGER.debug(f'Using service {self._session_base}')
+        self._LOGGER.info(f'Init PyCupra library, version {lib_version}')
+        self._LOGGER.debug(f'Using service {self._session_base}')
 
         self._sessionRequestCounter = 0
         self._sessionRequestTimestamp = datetime.now(tz= None)
@@ -188,15 +195,15 @@ class Connection:
                 self._user_id=tokens['user_id']
                 self.addToAnonymisationDict(self._user_id,'[USER_ID_ANONYMISED]')
                 return True
-            _LOGGER.info('No token file present. readTokenFile() returns False.')
+            self._LOGGER.info('No token file present. readTokenFile() returns False.')
             return False
         except:
-            _LOGGER.warning('readTokenFile() not successful.')
+            self._LOGGER.warning('readTokenFile() not successful.')
             return False
 
     def writeTokenFile(self, brand):
         if not hasattr(self, '_tokenFile'):
-            _LOGGER.debug('No token file name provided. Therefore tokens were not written to file.')
+            self._LOGGER.debug('No token file name provided. Therefore tokens were not written to file.')
             return False
         self._session_tokens[brand]['user_id']=self._user_id
         try:
@@ -205,19 +212,19 @@ class Connection:
             f.close()
             return True
         except Exception as e:
-            _LOGGER.warning(f'writeTokenFile() not successful. Error: {e}')
+            self._LOGGER.warning(f'writeTokenFile() not successful. Error: {e}')
             return False
 
     def deleteTokenFile(self):
         if not hasattr(self, '_tokenFile'):
-            _LOGGER.debug('No token file name provided. Therefore token file (if one exists) was not deleted.')
+            self._LOGGER.debug('No token file name provided. Therefore token file (if one exists) was not deleted.')
             return False
         try:
             os.remove(self._tokenFile)
-            _LOGGER.info(f'Deleted token file.')
+            self._LOGGER.info(f'Deleted token file.')
             return True
         except Exception as e:
-            _LOGGER.warning(f'deleteTokenFile() not successful. Error: {e}')
+            self._LOGGER.warning(f'deleteTokenFile() not successful. Error: {e}')
             return False
 
     def writeImageFile(self, imageName, imageData, imageDict, vin):
@@ -235,23 +242,23 @@ class Connection:
             with open(file_path, "wb") as f:
                 f.write(imageData)
             imageDict[imageName]=f'/local/pycupra/image_{vin}_{imageName}.png'
-            #_LOGGER.debug(f"Saved image: {file_path}") # Contains the vin, so should be commented out
+            #self._LOGGER.debug(f"Saved image: {file_path}") # Contains the vin, so should be commented out
             f.close()
             return True
         except Exception as e:
-            _LOGGER.warning(f'writeImageFile() not successful. Ignoring this problem. Error: {e}')
+            self._LOGGER.warning(f'writeImageFile() not successful. Ignoring this problem. Error: {e}')
             return False
 
   # API login/logout/authorization
     async def doLogin(self,**data) -> bool:
         """Login method, clean login or use token from file and refresh it"""
         #if len(self._session_tokens) > 0:
-        #    _LOGGER.info('Revoking old tokens.')
+        #    self._LOGGER.info('Revoking old tokens.')
         #    try:
         #        await self.logout()
         #    except:
         #        pass
-        _LOGGER.info('doLogin() first tries to read tokens from file and to refresh them.')
+        self._LOGGER.info('doLogin() first tries to read tokens from file and to refresh them.')
 
         # Remove cookies and re-init session
         self._clear_cookies()
@@ -271,9 +278,9 @@ class Connection:
             if result:
                 rc=await self.refresh_token(self._session_auth_brand)
                 if rc:
-                    _LOGGER.info('Successfully read tokens from file and refreshed them.')
+                    self._LOGGER.info('Successfully read tokens from file and refreshed them.')
                     return True
-        _LOGGER.info('Initiating new login with user name and password.')
+        self._LOGGER.info('Initiating new login with user name and password.')
         return await self._authorize(self._session_auth_brand)
 
     async def _authorize(self, client=BRAND_CUPRA) -> bool:
@@ -290,12 +297,23 @@ class Connection:
             #self._session_headers = HEADERS_SESSION.get(client).copy()
             #self._session_auth_headers = HEADERS_AUTH.copy()
 
-            _LOGGER.debug(f'Starting authorization process for client {client}')
+            self._LOGGER.debug('Checking for concurrent logins in progress')
+
+            waitTimeExpired = datetime.now(tz=None) + timedelta(seconds= 15)
+            global loginInProgress
+            while loginInProgress:
+                await asyncio.sleep(5)
+                if waitTimeExpired < datetime.now(tz=None):
+                    self._LOGGER.warning('Waited about 15 seconds for a concurrent login to finish without success. Assuming, it has ended.')
+                    loginInProgress = False
+            loginInProgress = True
+
+            self._LOGGER.debug(f'Starting authorization process for client {client}')
             req = await self._session.get(
                 url=AUTH_OIDCONFIG
             )
             if req.status != 200:
-                _LOGGER.debug(f'Get request to {AUTH_OIDCONFIG} was not successful. Response: {req}')
+                self._LOGGER.debug(f'Get request to {AUTH_OIDCONFIG} was not successful. Response: {req}')
                 return False
             response_data =  await req.json()
             authorizationEndpoint = response_data['authorization_endpoint']
@@ -311,7 +329,7 @@ class Connection:
 
             # Get authorization page (login page)
             if self._session_fulldebug:
-                _LOGGER.debug(f'Get authorization page: "{authorization_url}"')
+                self._LOGGER.debug(f'Get authorization page: "{authorization_url}"')
             try:
                 req = await self._session.get(
                     url=authorization_url,
@@ -324,30 +342,30 @@ class Connection:
                         error = parse_qs(urlparse(ref).query).get('error', '')[0]
                         if 'error_description' in ref:
                             error = parse_qs(urlparse(ref).query).get('error_description', '')[0]
-                            _LOGGER.info(f'Unable to login, {error}')
+                            self._LOGGER.info(f'Unable to login, {error}')
                         else:
-                            _LOGGER.info(f'Unable to login.')
+                            self._LOGGER.info(f'Unable to login.')
                         raise SeatException(error)
                     else:
                         if self._session_fulldebug:
-                            _LOGGER.debug(f'Got authorization endpoint: "{ref}"')
+                            self._LOGGER.debug(f'Got authorization endpoint: "{ref}"')
                         req = await self._session.get(
                             url=ref,
                             headers=self._session_auth_headers.get(client),
                             allow_redirects=False
                         )
                 else:
-                    _LOGGER.warning(f'Unable to fetch authorization endpoint')
+                    self._LOGGER.warning(f'Unable to fetch authorization endpoint')
                     raise SeatException('Missing "location" header')
             except (SeatException):
                 raise
             except Exception as error:
-                _LOGGER.warning(f'Failed to get authorization endpoint. {error}')
+                self._LOGGER.warning(f'Failed to get authorization endpoint. {error}')
                 raise SeatException(error)
 
             # If we need to sign in (first token)
             if 'signin-service' in ref:
-                _LOGGER.debug("Got redirect to signin-service")
+                self._LOGGER.debug("Got redirect to signin-service")
                 location = await self._signin_service(req, authissuer, authorizationEndpoint, client)
             else:
                 # We are already logged on, shorter authorization flow
@@ -367,7 +385,7 @@ class Connection:
                         elif errorTxt == 'login.errors.password_invalid':
                             raise SeatAuthenticationException('Invalid credentials')
                         else:
-                            _LOGGER.warning(f'Login failed: {errorTxt}')
+                            self._LOGGER.warning(f'Login failed: {errorTxt}')
                         raise SeatLoginFailedException(errorTxt)
                     if 'terms-and-conditions' in location:
                         raise SeatEULAException('The terms and conditions must be accepted first at your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/"')
@@ -376,16 +394,16 @@ class Connection:
                     if 'user_id' in location: # Get the user_id which is needed for some later requests
                         self._user_id=parse_qs(urlparse(location).query).get('user_id', [''])[0]
                         self.addToAnonymisationDict(self._user_id,'[USER_ID_ANONYMISED]')
-                        #_LOGGER.debug('Got user_id: %s' % self._user_id)
+                        #self._LOGGER.debug('Got user_id: %s' % self._user_id)
                     if self._session_fulldebug:
-                        _LOGGER.debug(self.anonymise(f'Following redirect to "{location}"'))
+                        self._LOGGER.debug(self.anonymise(f'Following redirect to "{location}"'))
                     response = await self._session.get(
                         url=location,
                         headers=self._session_auth_headers.get(client),
                         allow_redirects=False
                     )
                     if response.headers.get('Location', False) is False:
-                        _LOGGER.debug(f'Unexpected response: {await req.text()}')
+                        self._LOGGER.debug(f'Unexpected response: {await req.text()}')
                         raise SeatAuthenticationException('User appears unauthorized')
                     location = response.headers.get('Location', None)
                     # Set a max limit on requests to prevent forever loop
@@ -393,19 +411,19 @@ class Connection:
                     if maxDepth == 0:
                         raise SeatException('Too many redirects')
             except (SeatException, SeatEULAException, SeatAuthenticationException, SeatAccountLockedException, SeatLoginFailedException):
-                _LOGGER.warning(f'Running into login problems with location={location}')
+                self._LOGGER.warning(f'Running into login problems with location={location}')
                 raise
             except Exception as e:
                 # If we get an unhandled exception it should be because we can't redirect to the APP_URI URL and thus we have our auth code
                 if 'code' in location:
                     if self._session_fulldebug:
-                        _LOGGER.debug('Got code: %s' % location)
+                        self._LOGGER.debug('Got code: %s' % location)
                     pass
                 else:
-                    _LOGGER.debug(f'Exception occured while logging in.')
+                    self._LOGGER.debug(f'Exception occured while logging in.')
                     raise SeatLoginFailedException(e)
 
-            _LOGGER.debug('Received authorization code, exchange for tokens.')
+            self._LOGGER.debug('Received authorization code, exchange for tokens.')
             # Extract code and tokens
             auth_code = parse_qs(urlparse(location).query).get('code', [''])[0]
             # Save access, identity and refresh tokens according to requested client"""
@@ -459,37 +477,39 @@ class Connection:
             if self._session_fulldebug:
                 for key in self._session_tokens.get(client, {}):
                     if 'token' in key:
-                        _LOGGER.debug(f'Got {key} for client {CLIENT_LIST[client].get("CLIENT_ID","")}, token: "{self._session_tokens.get(client, {}).get(key, None)}"')
+                        self._LOGGER.debug(f'Got {key} for client {CLIENT_LIST[client].get("CLIENT_ID","")}, token: "{self._session_tokens.get(client, {}).get(key, None)}"')
             # Verify token, warn if problems are found
             verify = await self.verify_token(self._session_tokens[client].get('id_token', ''))
             if verify is False:
-                _LOGGER.warning(f'Token for {client} is invalid!')
+                self._LOGGER.warning(f'Token for {client} is invalid!')
             elif verify is True:
-                _LOGGER.debug(f'Token for {client} verified OK.')
+                self._LOGGER.debug(f'Token for {client} verified OK.')
             else:
-                _LOGGER.warning(f'Token for {client} could not be verified, verification returned {verify}.')
+                self._LOGGER.warning(f'Token for {client} could not be verified, verification returned {verify}.')
             loop = asyncio.get_running_loop()
             rt = await loop.run_in_executor(None, self.writeTokenFile, client)
         except (SeatEULAException):
-            _LOGGER.warning('Login failed, the terms and conditions might have been updated and need to be accepted. Login to  your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/" and accept the new terms before trying again')
+            self._LOGGER.warning('Login failed, the terms and conditions might have been updated and need to be accepted. Login to  your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/" and accept the new terms before trying again')
             raise
         #except (SeatMarketingConsentException):
-        #    _LOGGER.warning('Login failed, the marketing conditions might have been updated and need to be accepted or disagreed. Login to  your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/" and accept the new terms before trying again')
+        #    self._LOGGER.warning('Login failed, the marketing conditions might have been updated and need to be accepted or disagreed. Login to  your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/" and accept the new terms before trying again')
         #    raise
         except (SeatAccountLockedException):
-            _LOGGER.warning('Your account is locked, probably because of too many incorrect login attempts. Make sure that your account is not in use somewhere with incorrect password')
+            self._LOGGER.warning('Your account is locked, probably because of too many incorrect login attempts. Make sure that your account is not in use somewhere with incorrect password')
             raise
         except (SeatAuthenticationException):
-            _LOGGER.warning('Invalid credentials or invalid configuration. Make sure you have entered the correct credentials')
+            self._LOGGER.warning('Invalid credentials or invalid configuration. Make sure you have entered the correct credentials')
             raise
         except (SeatException):
-            _LOGGER.error('An API error was encountered during login, try again later')
+            self._LOGGER.error('An API error was encountered during login, try again later')
             raise
         except (TypeError):
-            _LOGGER.warning(self.anonymise(f'Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at your local SEAT/Cupra site, e.g. "https://cupraofficial.se/"'))
+            self._LOGGER.warning(self.anonymise(f'Login failed for {self._session_auth_username}. The server might be temporarily unavailable, try again later. If the problem persists, verify your account at your local SEAT/Cupra site, e.g. "https://cupraofficial.se/"'))
         except Exception as error:
-            _LOGGER.error(self.anonymise(f'Login failed for {self._session_auth_username}, {error}'))
+            self._LOGGER.error(self.anonymise(f'Login failed for {self._session_auth_username}, {error}'))
+            loginInProgress = False
             return False
+        loginInProgress = False
         return True
 
     async def _signin_service(self, html, authissuer, authorizationEndpoint, client=BRAND_CUPRA):
@@ -503,18 +523,18 @@ class Connection:
                 raise SeatLoginFailedException('Login failed, server did not return a login form')
             for t in responseSoup.find('form', id='emailPasswordForm').find_all('input', type='hidden'):
                 if self._session_fulldebug:
-                    _LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
+                    self._LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
                 form_data[t['name']] = t['value']
             form_data['email'] = self._session_auth_username
             pe_url = authissuer+responseSoup.find('form', id='emailPasswordForm').get('action')
         except Exception as e:
-            _LOGGER.error('Failed to extract user login form.')
+            self._LOGGER.error('Failed to extract user login form.')
             raise
 
         # POST email
         self._session_auth_headers[client]['Referer'] = authorizationEndpoint
         self._session_auth_headers[client]['Origin'] = authissuer
-        _LOGGER.debug(self.anonymise(f"Start authorization for user {self._session_auth_username}"))
+        self._LOGGER.debug(self.anonymise(f"Start authorization for user {self._session_auth_username}"))
         req = await self._session.post(
             url = pe_url,
             headers = self._session_auth_headers.get(client),
@@ -529,22 +549,22 @@ class Connection:
             credentials_form = responseSoup.find('form', id='credentialsForm')
             all_scripts = responseSoup.find_all('script', {'src': False})
             if credentials_form is not None:
-                _LOGGER.debug('Found HTML credentials form, extracting attributes')
+                self._LOGGER.debug('Found HTML credentials form, extracting attributes')
                 for t in credentials_form.find_all('input', type='hidden'):
                     if self._session_fulldebug:
-                        _LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
+                        self._LOGGER.debug(f'Extracted form attribute: {t["name"], t["value"]}')
                     pwform[t['name']] = t['value']
                     form_data = pwform
                     post_action = responseSoup.find('form', id='credentialsForm').get('action')
             elif all_scripts is not None:
-                _LOGGER.debug('Found dynamic credentials form, extracting attributes')
+                self._LOGGER.debug('Found dynamic credentials form, extracting attributes')
                 pattern = re.compile("templateModel: (.*?),\n")
                 for sc in all_scripts:
                     if(pattern.search(sc.string)):
                         import json
                         data = pattern.search(sc.string)
                         jsondata = json.loads(data.groups()[0])
-                        _LOGGER.debug(self.anonymise(f'JSON: {jsondata}'))
+                        self._LOGGER.debug(self.anonymise(f'JSON: {jsondata}'))
                         if not jsondata.get('hmac', False):
                             raise SeatLoginFailedException('Failed to extract login hmac attribute')
                         if not jsondata.get('postAction', False):
@@ -564,7 +584,7 @@ class Connection:
         # POST password
         self._session_auth_headers[client]['Referer'] = pe_url
         self._session_auth_headers[client]['Origin'] = authissuer
-        _LOGGER.debug(f"Finalizing login")
+        self._LOGGER.debug(f"Finalizing login")
 
         client_id = CLIENT_LIST[client].get('CLIENT_ID')
         pp_url = authissuer+'/'+post_action
@@ -572,7 +592,7 @@ class Connection:
             pp_url = authissuer+'/signin-service/v1/'+client_id+"/"+post_action
 
         if self._session_fulldebug:
-            _LOGGER.debug(f'Using login action url: "{pp_url}"')
+            self._LOGGER.debug(f'Using login action url: "{pp_url}"')
         req = await self._session.post(
             url=pp_url,
             headers=self._session_auth_headers.get(client),
@@ -584,17 +604,17 @@ class Connection:
     async def terminate(self) -> None:
         """Log out from connect services"""
         for v in self.vehicles:
-            _LOGGER.debug(self.anonymise(f'Calling stopFirebase() for vehicle {v.vin}'))
+            self._LOGGER.debug(self.anonymise(f'Calling stopFirebase() for vehicle {v.vin}'))
             newStatus = await v.stopFirebase()
             if newStatus != FIREBASE_STATUS_NOT_INITIALISED:
-                _LOGGER.debug(self.anonymise(f'stopFirebase() not successful for vehicle {v.vin}'))
+                self._LOGGER.debug(self.anonymise(f'stopFirebase() not successful for vehicle {v.vin}'))
                 # Although stopFirebase() was not successful, the firebase status is reset to FIREBASE_STATUS_NOT_INITIALISED to allow a new initialisation
                 v.firebaseStatus = FIREBASE_STATUS_NOT_INITIALISED
         await self.logout()
 
     async def logout(self) -> None:
         """Logout, revoke tokens."""
-        _LOGGER.info(f'Initiating logout.')
+        self._LOGGER.info(f'Initiating logout.')
         self._session_headers.pop('Authorization', None)
         self._session_headers.pop('tokentype', None)
         self._session_headers['Content-Type'] = 'application/x-www-form-urlencoded'
@@ -625,34 +645,34 @@ class Connection:
                 'request_info': error.request_info
             }
             if error.status == 401:
-                _LOGGER.warning('Received "Unauthorized" while fetching data. This can occur if tokens expired or refresh service is unavailable.')
+                self._LOGGER.warning('Received "Unauthorized" while fetching data. This can occur if tokens expired or refresh service is unavailable.')
                 if self._error401 != True:
                     self._error401 = True
                     rc=await self.refresh_token(self._session_auth_brand)
                     if rc:
-                        _LOGGER.info('Successfully refreshed tokens after error 401.')
+                        self._LOGGER.info('Successfully refreshed tokens after error 401.')
                         self._error401 = False
                         #return True
                     else:
-                        _LOGGER.info('Refresh of tokens after error 401 not successful.')
+                        self._LOGGER.info('Refresh of tokens after error 401 not successful.')
             elif error.status == 400:
-                _LOGGER.error('Received "Bad Request" from server. The request might be malformed or not implemented correctly for this vehicle.')
+                self._LOGGER.error('Received "Bad Request" from server. The request might be malformed or not implemented correctly for this vehicle.')
             elif error.status == 412:
-                _LOGGER.debug('Received "Pre-condition failed". Service might be temporarily unavailable.')
+                self._LOGGER.debug('Received "Pre-condition failed". Service might be temporarily unavailable.')
             elif error.status == 500:
-                _LOGGER.info('Received "Internal server error". The service is temporarily unavailable.')
+                self._LOGGER.info('Received "Internal server error". The service is temporarily unavailable.')
             elif error.status == 502:
-                _LOGGER.info('Received "Bad gateway". Either the endpoint is temporarily unavailable or not supported for this vehicle.')
+                self._LOGGER.info('Received "Bad gateway". Either the endpoint is temporarily unavailable or not supported for this vehicle.')
             elif 400 <= error.status <= 499:
-                _LOGGER.error('Received unhandled error indicating client-side problem.\nRestart or try again later.')
+                self._LOGGER.error('Received unhandled error indicating client-side problem.\nRestart or try again later.')
             elif 500 <= error.status <= 599:
-                _LOGGER.error('Received unhandled error indicating server-side problem.\nThe service might be temporarily unavailable.')
+                self._LOGGER.error('Received unhandled error indicating server-side problem.\nThe service might be temporarily unavailable.')
             else:
-                _LOGGER.error('Received unhandled error while requesting API endpoint.')
-            _LOGGER.debug(self.anonymise(f'HTTP request information: {data}'))
+                self._LOGGER.error('Received unhandled error while requesting API endpoint.')
+            self._LOGGER.debug(self.anonymise(f'HTTP request information: {data}'))
             return data
         except Exception as e:
-            _LOGGER.debug(f'Got non HTTP related error: {e}')
+            self._LOGGER.debug(f'Got non HTTP related error: {e}')
             return {
                 'error_description': 'Non HTTP related error'
             }
@@ -672,19 +692,19 @@ class Connection:
                 argsString = 'with '
                 for k, val in kwargs.items():
                     argsString = argsString + f"{k}=\'{val}\' " 
-            _LOGGER.debug(self.anonymise(f'HTTP {method} "{url}" {argsString}'))
+            self._LOGGER.debug(self.anonymise(f'HTTP {method} "{url}" {argsString}'))
         try:
             if datetime.now(tz=None).date() != self._sessionRequestTimestamp.date():
                 # A new day has begun. Store _sessionRequestCounter in history and reset timestamp and counter
                 self._sessionRequestCounterHistory[self._sessionRequestTimestamp.strftime('%Y-%m-%d')]=self._sessionRequestCounter
-                _LOGGER.info(f'History of the number of API calls:')
+                self._LOGGER.info(f'History of the number of API calls:')
                 for key, value in self._sessionRequestCounterHistory.items():
-                    _LOGGER.info(f'   Date: {key}: {value} API calls')
+                    self._LOGGER.info(f'   Date: {key}: {value} API calls')
 
                 self._sessionRequestTimestamp= datetime.now(tz=None)
                 self._sessionRequestCounter = 0
         except Exception as e:
-            _LOGGER.error(f'Error while preparing output of API call history. Error: {e}')
+            self._LOGGER.error(f'Error while preparing output of API call history. Error: {e}')
         self._sessionRequestCounter = self._sessionRequestCounter + 1
         async with self._session.request(
             method,
@@ -726,50 +746,50 @@ class Connection:
                             res = await response.json(loads=json_loads)
                 else:
                     res = {}
-                    _LOGGER.debug(self.anonymise(f'Not success status code [{response.status}] response: {response}'))
+                    self._LOGGER.debug(self.anonymise(f'Not success status code [{response.status}] response: {response}'))
                 if 'X-RateLimit-Remaining' in response.headers:
                     res['rate_limit_remaining'] = response.headers.get('X-RateLimit-Remaining', '')
             except Exception as e:
                 res = {}
-                _LOGGER.debug(self.anonymise(f'Something went wrong [{response.status}] response: {response}, error: {e}'))
+                self._LOGGER.debug(self.anonymise(f'Something went wrong [{response.status}] response: {response}, error: {e}'))
                 return res
 
             if self._session_fulldebug:
                 if 'image/png'  in response.headers.get('Content-Type', ''):
-                    _LOGGER.debug(self.anonymise(f'Request for "{url}" returned with status code [{response.status}]. Not showing response for Content-Type image/png.'))
+                    self._LOGGER.debug(self.anonymise(f'Request for "{url}" returned with status code [{response.status}]. Not showing response for Content-Type image/png.'))
                 elif method==METH_PUT or method==METH_DELETE:
                     # deepcopy() of res can produce errors, if res is the API response on PUT or DELETE
-                    _LOGGER.debug(f'Request for "{self.anonymise(url)}" returned with status code [{response.status}]. Not showing response for http {method}')
+                    self._LOGGER.debug(f'Request for "{self.anonymise(url)}" returned with status code [{response.status}]. Not showing response for http {method}')
                 else:
-                    _LOGGER.debug(self.anonymise(f'Request for "{url}" returned with status code [{response.status}], response: {self.anonymise(deepcopy(res))}'))
+                    self._LOGGER.debug(self.anonymise(f'Request for "{url}" returned with status code [{response.status}], response: {self.anonymise(deepcopy(res))}'))
             else:
-                _LOGGER.debug(f'Request for "{url}" returned with status code [{response.status}]')
+                self._LOGGER.debug(f'Request for "{url}" returned with status code [{response.status}]')
             return res
 
     async def _data_call(self, query, **data):
         """Function for POST actions with error handling."""
         try:
             response = await self.post(query, **data)
-            _LOGGER.debug(self.anonymise(f'Data call returned: {response}'))
+            self._LOGGER.debug(self.anonymise(f'Data call returned: {response}'))
             return response
         except aiohttp.client_exceptions.ClientResponseError as error:
-            _LOGGER.debug(self.anonymise(f'Request failed. Data: {data}, HTTP request headers: {self._session_headers}'))
+            self._LOGGER.debug(self.anonymise(f'Request failed. Data: {data}, HTTP request headers: {self._session_headers}'))
             if error.status == 401:
-                _LOGGER.error('Unauthorized')
+                self._LOGGER.error('Unauthorized')
             elif error.status == 400:
-                _LOGGER.error(f'Bad request')
+                self._LOGGER.error(f'Bad request')
             elif error.status == 429:
-                _LOGGER.warning('Too many requests. Further requests can only be made after the end of next trip in order to protect your vehicles battery.')
+                self._LOGGER.warning('Too many requests. Further requests can only be made after the end of next trip in order to protect your vehicles battery.')
                 return 429
             elif error.status == 500:
-                _LOGGER.error('Internal server error, server might be temporarily unavailable')
+                self._LOGGER.error('Internal server error, server might be temporarily unavailable')
             elif error.status == 502:
-                _LOGGER.error('Bad gateway, this function may not be implemented for this vehicle')
+                self._LOGGER.error('Bad gateway, this function may not be implemented for this vehicle')
             else:
-                _LOGGER.error(f'Unhandled HTTP exception: {error}')
+                self._LOGGER.error(f'Unhandled HTTP exception: {error}')
             #return False
         except Exception as error:
-            _LOGGER.error(f'Failure to execute: {error}')
+            self._LOGGER.error(f'Failure to execute: {error}')
         return False
 
   # Class get data functions
@@ -780,20 +800,20 @@ class Connection:
             update_list = []
             for vehicle in self.vehicles:
                 if vehicle.vin not in update_list:
-                    _LOGGER.debug(self.anonymise(f'Adding {vehicle.vin} for data refresh'))
+                    self._LOGGER.debug(self.anonymise(f'Adding {vehicle.vin} for data refresh'))
                     update_list.append(vehicle.update(updateType=1))
                 else:
-                    _LOGGER.debug(self.anonymise(f'VIN {vehicle.vin} is already queued for data refresh'))
+                    self._LOGGER.debug(self.anonymise(f'VIN {vehicle.vin} is already queued for data refresh'))
 
             # Wait for all data updates to complete
             if len(update_list) == 0:
-                _LOGGER.info('No vehicles in account to update')
+                self._LOGGER.info('No vehicles in account to update')
             else:
-                _LOGGER.debug('Calling update function for all vehicles')
+                self._LOGGER.debug('Calling update function for all vehicles')
                 await asyncio.gather(*update_list)
             return True
         except (IOError, OSError, LookupError, Exception) as error:
-            _LOGGER.warning(f'An error was encountered during interaction with the API: {error}')
+            self._LOGGER.warning(f'An error was encountered during interaction with the API: {error}')
         except:
             raise
         return False
@@ -808,18 +828,18 @@ class Connection:
             if response.get('nickname'):
                 userData= response
             else:
-                _LOGGER.debug('Could not retrieve profile information')
+                self._LOGGER.debug('Could not retrieve profile information')
         except:
-            _LOGGER.debug('Could not fetch personal information.')
+            self._LOGGER.debug('Could not fetch personal information.')
 
         try:
             response = await self.get(API_USER_INFO)
             if response.get('name'):
                 userData = response
             else:
-                _LOGGER.debug('Could not retrieve profile information')
+                self._LOGGER.debug('Could not retrieve profile information')
         except:
-            _LOGGER.debug('Could not fetch personal information.')
+            self._LOGGER.debug('Could not fetch personal information.')
         self._userData=userData
         return userData
 
@@ -829,35 +849,35 @@ class Connection:
         # Check if user needs to update consent
         try:
             await self.set_token(self._session_auth_brand)
-            #_LOGGER.debug('Achtung! getConsentInfo auskommentiert')
+            #self._LOGGER.debug('Achtung! getConsentInfo auskommentiert')
             response = await self.get(API_MBB_STATUSDATA.format(userId=self._user_id))
             if response.get('profileCompleted','incomplete'):
                 if response.get('profileCompleted',False):
-                    _LOGGER.debug('User consent is valid, no missing information for profile')
+                    self._LOGGER.debug('User consent is valid, no missing information for profile')
                 else:
-                    _LOGGER.debug('Profile incomplete. Please visit the web portal')
+                    self._LOGGER.debug('Profile incomplete. Please visit the web portal')
             else:
-                _LOGGER.debug('Could not retrieve profile information')
+                self._LOGGER.debug('Could not retrieve profile information')
             """consent = await self.getConsentInfo()
             if isinstance(consent, dict):
-                _LOGGER.debug(f'Consent returned {consent}')
+                self._LOGGER.debug(f'Consent returned {consent}')
                 if 'status' in consent.get('mandatoryConsentInfo', []):
                     if consent.get('mandatoryConsentInfo', [])['status'] != 'VALID':
-                        _LOGGER.error(f'The user needs to update consent for {consent.get("mandatoryConsentInfo", [])["id"]}. If problems are encountered please visit the web portal first and accept terms and conditions.')
+                        self._LOGGER.error(f'The user needs to update consent for {consent.get("mandatoryConsentInfo", [])["id"]}. If problems are encountered please visit the web portal first and accept terms and conditions.')
                 elif len(consent.get('missingMandatoryFields', [])) > 0:
-                    _LOGGER.error(f'Missing mandatory field for user: {consent.get("missingMandatoryFields", [])[0].get("name", "")}. If problems are encountered please visit the web portal first and accept terms and conditions.')
+                    self._LOGGER.error(f'Missing mandatory field for user: {consent.get("missingMandatoryFields", [])[0].get("name", "")}. If problems are encountered please visit the web portal first and accept terms and conditions.')
                 else:
-                    _LOGGER.debug('User consent is valid, no missing information for profile')
+                    self._LOGGER.debug('User consent is valid, no missing information for profile')
             else:
-                _LOGGER.debug('Could not retrieve consent information')"""
+                self._LOGGER.debug('Could not retrieve consent information')"""
         except:
-            _LOGGER.debug('Could not fetch consent information. If problems are encountered please visit the web portal first and make sure that no new terms and conditions need to be accepted.')
+            self._LOGGER.debug('Could not fetch consent information. If problems are encountered please visit the web portal first and make sure that no new terms and conditions need to be accepted.')
 
         # Fetch vehicles
         try:
             legacy_vehicles = await self.get(API_VEHICLES.format(APP_URI=APP_URI, userId=self._user_id))
             if legacy_vehicles.get('vehicles', False):
-                _LOGGER.debug('Found vehicle(s) associated with account.')
+                self._LOGGER.debug('Found vehicle(s) associated with account.')
                 for vehicle in legacy_vehicles.get('vehicles'):
                     vin = vehicle.get('vin', '')
                     self.addToAnonymisationDict(vin,'[VIN_ANONYMISED]')
@@ -867,18 +887,18 @@ class Connection:
                         vehicle["capabilities"]=response.get('capabilities')
                         vehicle["platform"] = response.get('platform', 'MOD3')
                     else:
-                        _LOGGER.warning(f"Failed to aquire capabilities information about vehicle with VIN {vehicle}.")
+                        self._LOGGER.warning(f"Failed to aquire capabilities information about vehicle with VIN {vehicle}.")
                         if vehicle.get('capabilities',None)!=None:
-                            _LOGGER.warning(f"Keeping the old capability information.")
+                            self._LOGGER.warning(f"Keeping the old capability information.")
                         else:
-                            _LOGGER.warning(f"Initialising vehicle without capabilities.")
+                            self._LOGGER.warning(f"Initialising vehicle without capabilities.")
                             vehicle["capabilities"]=[]
                     response = await self.get(API_CONNECTION.format(APP_URI=APP_URI, vin=vin))
                     #self._session_headers['Accept'] = 'application/json'
                     if response.get('connection', False):
                         vehicle["connectivities"]=response.get('connection')
                     else:
-                        _LOGGER.warning(f"Failed to aquire connection information about vehicle with VIN {vehicle}")
+                        self._LOGGER.warning(f"Failed to aquire connection information about vehicle with VIN {vehicle}")
                     api_vehicles.append(vehicle)
         except:
             raise
@@ -890,7 +910,7 @@ class Connection:
         else:
             try:
                 for vehicle in api_vehicles:
-                    _LOGGER.debug(self.anonymise(f'Checking vehicle {vehicle}'))
+                    self._LOGGER.debug(self.anonymise(f'Checking vehicle {vehicle}'))
                     vin = vehicle.get('vin', '')
                     #for service in vehicle.get('connectivities', []):
                     #    if isinstance(service, str):
@@ -909,18 +929,19 @@ class Connection:
                         'capabilities': vehicle.get('capabilities'),
                         'specification': vehicle.get('specifications'),
                         'properties': properties,
+                        'logPrefix': self._logPrefix,
                     }
                     # Check if object already exist
-                    _LOGGER.debug(f'Check if vehicle exists')
+                    self._LOGGER.debug(f'Check if vehicle exists')
                     if self.vehicle(vin) is not None:
-                        _LOGGER.debug(self.anonymise(f'Vehicle with VIN number {vin} already exist.'))
+                        self._LOGGER.debug(self.anonymise(f'Vehicle with VIN number {vin} already exist.'))
                         car = Vehicle(self, newVehicle)
                         if not car == self.vehicle(newVehicle):
-                            _LOGGER.debug(self.anonymise(f'Updating {newVehicle} object'))
+                            self._LOGGER.debug(self.anonymise(f'Updating {newVehicle} object'))
                             self._vehicles.pop(newVehicle)
                             self._vehicles.append(Vehicle(self, newVehicle))
                     else:
-                        _LOGGER.debug(self.anonymise(f'Adding vehicle {vin}, with connectivities: {vehicle.get('connectivities')}'))
+                        self._LOGGER.debug(self.anonymise(f'Adding vehicle {vin}, with connectivities: {vehicle.get('connectivities')}'))
                         self._vehicles.append(Vehicle(self, newVehicle))
             except:
                 raise SeatLoginFailedException("Unable to fetch associated vehicles for account")
@@ -957,11 +978,11 @@ class Connection:
                 }
                 return data
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch realCarData, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch realCarData, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch consent information')
+                self._LOGGER.info('Unhandled error while trying to fetch consent information')
         except Exception as error:
-            _LOGGER.debug(f'Could not get consent information, error {error}')
+            self._LOGGER.debug(f'Could not get consent information, error {error}')
         return False"""
 
     async def getBasicCarData(self, vin, baseurl) -> dict | bool:
@@ -973,11 +994,11 @@ class Connection:
             if response.get('engines', {}):
                 data['mycar']= response
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch vehicle mycar report, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch vehicle mycar report, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch mycar data')
+                self._LOGGER.info('Unhandled error while trying to fetch mycar data')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch mycar report, error: {error}')
+            self._LOGGER.warning(f'Could not fetch mycar report, error: {error}')
         if data=={}:
             return False
         return data
@@ -991,11 +1012,11 @@ class Connection:
             if response.get('mileageKm', {}):
                 data['mileage'] = response
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch mileage information, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch mileage information, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch mileage information')
+                self._LOGGER.info('Unhandled error while trying to fetch mileage information')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch mileage information, error: {error}')
+            self._LOGGER.warning(f'Could not fetch mileage information, error: {error}')
         if data=={}:
             return False
         return data
@@ -1009,11 +1030,11 @@ class Connection:
             if 'statuses' in response:
                 data['warninglights'] = response
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch warnlights, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch warnlights, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch warnlights')
+                self._LOGGER.info('Unhandled error while trying to fetch warnlights')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch warnlights, error: {error}')
+            self._LOGGER.warning(f'Could not fetch warnlights, error: {error}')
         if data=={}:
             return False
         return data
@@ -1026,13 +1047,13 @@ class Connection:
             if response.get('operationList', False):
                 data = response.get('operationList', {})
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch operation list, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch operation list, HTTP status code: {response.get("status_code")}')
                 data = response
             else:
-                _LOGGER.info(f'Could not fetch operation list: {response}')
+                self._LOGGER.info(f'Could not fetch operation list: {response}')
                 data = {'error': 'unknown'}
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch operation list, error: {error}')
+            self._LOGGER.warning(f'Could not fetch operation list, error: {error}')
             data = {'error': 'unknown'}
         return data"""
 
@@ -1073,17 +1094,17 @@ class Connection:
                                     im1.save(byteIO, format='PNG')
                                     await loop.run_in_executor(None, self.writeImageFile, pos+'_cropped',byteIO.getvalue(), images, vin)
                                 except:
-                                    _LOGGER.warning('Cropping front image to square format failed.')
+                                    self._LOGGER.warning('Cropping front image to square format failed.')
  
-                    _LOGGER.debug('Read images from web site and wrote them to file.')
+                    self._LOGGER.debug('Read images from web site and wrote them to file.')
                     response['images']=images
                     return response
                 else:
-                    _LOGGER.debug(f'Could not fetch Model image URL, request returned with status code {response.status_code}')
+                    self._LOGGER.debug(f'Could not fetch Model image URL, request returned with status code {response.status_code}')
             except:
-                _LOGGER.debug('Could not fetch Model image URL')
+                self._LOGGER.debug('Could not fetch Model image URL')
         except:
-            _LOGGER.debug('Could not fetch Model image URL, message signing failed.')
+            self._LOGGER.debug('Could not fetch Model image URL, message signing failed.')
         return None
 
     async def getVehicleStatusReport(self, vin, baseurl) -> dict | bool:
@@ -1095,11 +1116,11 @@ class Connection:
             if response.get('doors', False):
                 data['status']= response
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch vehicle status report, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch vehicle status report, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch status data')
+                self._LOGGER.info('Unhandled error while trying to fetch status data')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch status report, error: {error}')
+            self._LOGGER.warning(f'Could not fetch status report, error: {error}')
         if data=={}:
             return False
         return data
@@ -1113,11 +1134,11 @@ class Connection:
             if response.get('inspectionDueDays', {}):
                 data['maintenance'] = response
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch maintenance information, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch maintenance information, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch maintenance information')
+                self._LOGGER.info('Unhandled error while trying to fetch maintenance information')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch maintenance information, error: {error}')
+            self._LOGGER.warning(f'Could not fetch maintenance information, error: {error}')
         if data=={}:
             return False
         return data
@@ -1139,11 +1160,11 @@ class Connection:
                 if response.get('data', []):
                     data['tripstatistics']['cyclic']= response.get('data', [])
                 elif response.get('status_code', {}):
-                    _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
+                    self._LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
                 else:
-                    _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
+                    self._LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
             else:
-                _LOGGER.info(f'Vehicle does not support cyclic trips.')
+                self._LOGGER.info(f'Vehicle does not support cyclic trips.')
             dataType='SHORT'
             if self._session_tripStatisticsStartDate==None:
                 # If connection was not initialised with parameter tripStatisticsStartDate, then 360 day is used for the CYCLIC trips and 90 days for the SHORT trips
@@ -1153,13 +1174,13 @@ class Connection:
             if response.get('data', []):
                 data['tripstatistics']['short']= response.get('data', [])
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
+                self._LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
             if data.get('tripstatistics',{}) != {}:
                 return data
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
+            self._LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
         return False
 
     async def getPosition(self, vin, baseurl) -> dict | bool:
@@ -1183,18 +1204,18 @@ class Connection:
                 return data
             elif response.get('status_code', {}):
                 if response.get('status_code', 0) == 204:
-                    _LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
+                    self._LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
                     data = {
                         'isMoving': True,
                         'rate_limit_remaining': 15
                     }
                     return data
                 else:
-                    _LOGGER.warning(f'Could not fetch position, HTTP status code: {response.get("status_code")}')
+                    self._LOGGER.warning(f'Could not fetch position, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch positional data')
+                self._LOGGER.info('Unhandled error while trying to fetch positional data')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch position, error: {error}')
+            self._LOGGER.warning(f'Could not fetch position, error: {error}')
         return False
 
     async def getClimatisationtimer(self, vin, baseurl) -> dict | bool:
@@ -1207,11 +1228,11 @@ class Connection:
                 data['climatisationTimers'] = response
                 return data
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch climatisation timers, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch climatisation timers, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unknown error while trying to fetch data for climatisation timers')
+                self._LOGGER.info('Unknown error while trying to fetch data for climatisation timers')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch climatisation timers, error: {error}')
+            self._LOGGER.warning(f'Could not fetch climatisation timers, error: {error}')
         return False
 
     async def getDeparturetimer(self, vin, baseurl) -> dict | bool:
@@ -1224,11 +1245,11 @@ class Connection:
                 data['departureTimers'] = response
                 return data
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch departure timers, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch departure timers, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unknown error while trying to fetch data for departure timers')
+                self._LOGGER.info('Unknown error while trying to fetch data for departure timers')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch departure timers, error: {error}')
+            self._LOGGER.warning(f'Could not fetch departure timers, error: {error}')
         return False
 
     async def getDepartureprofiles(self, vin, baseurl) -> dict | bool:
@@ -1246,11 +1267,11 @@ class Connection:
                 data['departureProfiles'] = response
                 return data
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch departure profiles, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch departure profiles, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unknown error while trying to fetch data for departure profiles')
+                self._LOGGER.info('Unknown error while trying to fetch data for departure profiles')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch departure profiles, error: {error}')
+            self._LOGGER.warning(f'Could not fetch departure profiles, error: {error}')
         return False
 
     async def getClimater(self, vin, baseurl, oldClimatingData) -> dict | bool:
@@ -1264,23 +1285,23 @@ class Connection:
             if response.get('climatisationStatus', {}) or response.get('auxiliaryHeatingStatus', {}):
                 data['climater']['status']=response
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch climatisation status, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch climatisation status, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch climatisation status')
+                self._LOGGER.info('Unhandled error while trying to fetch climatisation status')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch climatisation status, error: {error}')
+            self._LOGGER.warning(f'Could not fetch climatisation status, error: {error}')
         try:
             response = await self.get((API_CLIMATER+'/settings').format(baseurl=baseurl, vin=vin))
             if response.get('targetTemperatureInCelsius', {}):
                 data['climater']['settings']=response
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch climatisation settings, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch climatisation settings, HTTP status code: {response.get("status_code")}')
             elif response.get('carCapturedTimestamp', {}):
-                _LOGGER.info('API returned no climatisation settings for the vehicle, just a timestamp')
+                self._LOGGER.info('API returned no climatisation settings for the vehicle, just a timestamp')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch climatisation settings')
+                self._LOGGER.info('Unhandled error while trying to fetch climatisation settings')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch climatisation settings, error: {error}')
+            self._LOGGER.warning(f'Could not fetch climatisation settings, error: {error}')
         if data['climater']=={}:
             return False
         return data
@@ -1297,52 +1318,52 @@ class Connection:
             if response.get('battery', {}):
                 chargingStatus = response
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch charging status, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch charging status, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch charging status')
+                self._LOGGER.info('Unhandled error while trying to fetch charging status')
             response = await self.get((API_CHARGING+'/info').format(baseurl=baseurl, vin=vin))
             if response.get('settings', {}):
                 chargingInfo = response
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch charging info, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch charging info, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch charging info')
+                self._LOGGER.info('Unhandled error while trying to fetch charging info')
             """response = await self.get((API_CHARGING+'/modes').format(baseurl=baseurl, vin=vin))
             if response.get('battery', {}):
                 chargingModes = response
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch charging modes, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch charging modes, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch charging modes')"""
+                self._LOGGER.info('Unhandled error while trying to fetch charging modes')"""
             if chargingProfilesActivated:
                 response = await self.get(API_CHARGING_PROFILES.format(baseurl=baseurl, vin=vin))
                 if response.get('profiles', 0)!=0:
                     chargingProfiles = response
                 elif response.get('status_code', {}):
-                    _LOGGER.warning(f'Could not fetch charging profiles, HTTP status code: {response.get("status_code")}')
+                    self._LOGGER.warning(f'Could not fetch charging profiles, HTTP status code: {response.get("status_code")}')
                 else:
-                    _LOGGER.info('Unhandled error while trying to fetch charging profiles')
+                    self._LOGGER.info('Unhandled error while trying to fetch charging profiles')
             data = {'charging': oldChargingData}
             if chargingStatus != {}:
                 data['charging']['status'] = chargingStatus
             else:
-                _LOGGER.warning(f'getCharger() got no valid data for charging status')
+                self._LOGGER.warning(f'getCharger() got no valid data for charging status')
             if chargingInfo != {}:
                 data['charging']['info'] = chargingInfo
             else:
-                _LOGGER.warning(f'getCharger() got no valid data for charging info')
+                self._LOGGER.warning(f'getCharger() got no valid data for charging info')
             #if chargingModes != {}:
             #    data['charging']['modes'] = chargingModes
             #else:
-            #    _LOGGER.warning(f'getCharger() got no valid data for charging modes')
+            #    self._LOGGER.warning(f'getCharger() got no valid data for charging modes')
             if chargingProfiles != {}:
                 data['charging']['profiles'] = chargingProfiles
             else:
                 if chargingProfilesActivated:
-                    _LOGGER.warning(f'getCharger() got no valid data for charging profiles')
+                    self._LOGGER.warning(f'getCharger() got no valid data for charging profiles')
             return data
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch charger, error: {error}')
+            self._LOGGER.warning(f'Could not fetch charger, error: {error}')
         return False
 
     async def getPreHeater(self, vin, baseurl) -> dict | bool:
@@ -1354,11 +1375,11 @@ class Connection:
                 data = {'heating': response.get('statusResponse', {})}
                 return data
             elif response.get('status_code', {}):
-                _LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}')
+                self._LOGGER.warning(f'Could not fetch pre-heating, HTTP status code: {response.get("status_code")}')
             else:
-                _LOGGER.info('Unhandled error while trying to fetch pre-heating data')
+                self._LOGGER.info('Unhandled error while trying to fetch pre-heating data')
         except Exception as error:
-            _LOGGER.warning(f'Could not fetch pre-heating, error: {error}')
+            self._LOGGER.warning(f'Could not fetch pre-heating, error: {error}')
         return False
 
  #### API data set functions ####
@@ -1462,30 +1483,30 @@ class Connection:
             url = f'{APP_URI}/v1/subscriptions/{id}'
             response = await self._request(METH_DELETE, url)
             if response.status==200: 
-                _LOGGER.debug(f'Subscription {id} successfully deleted.')
+                self._LOGGER.debug(f'Subscription {id} successfully deleted.')
                 return response
             else:
-                _LOGGER.debug(f'API did not successfully delete subscription.')
+                self._LOGGER.debug(f'API did not successfully delete subscription.')
                 raise SeatException(f'Invalid or no response for endpoint {url}')
                 return response
         except aiohttp.client_exceptions.ClientResponseError as error:
-            _LOGGER.debug(f'Request failed. Id: {id}, HTTP request headers: {self._session_headers}')
+            self._LOGGER.debug(f'Request failed. Id: {id}, HTTP request headers: {self._session_headers}')
             if error.status == 401:
-                _LOGGER.error('Unauthorized')
+                self._LOGGER.error('Unauthorized')
             elif error.status == 400:
-                _LOGGER.error(f'Bad request')
+                self._LOGGER.error(f'Bad request')
             elif error.status == 429:
-                _LOGGER.warning('Too many requests. Further requests can only be made after the end of next trip in order to protect your vehicles battery.')
+                self._LOGGER.warning('Too many requests. Further requests can only be made after the end of next trip in order to protect your vehicles battery.')
                 return 429
             elif error.status == 500:
-                _LOGGER.error('Internal server error, server might be temporarily unavailable')
+                self._LOGGER.error('Internal server error, server might be temporarily unavailable')
             elif error.status == 502:
-                _LOGGER.error('Bad gateway, this function may not be implemented for this vehicle')
+                self._LOGGER.error('Bad gateway, this function may not be implemented for this vehicle')
             else:
-                _LOGGER.error(f'Unhandled HTTP exception: {error}')
+                self._LOGGER.error(f'Unhandled HTTP exception: {error}')
             #return False
         except Exception as error:
-            _LOGGER.error(f'Error: {error}')
+            self._LOGGER.error(f'Error: {error}')
             raise
         return False
 
@@ -1500,7 +1521,7 @@ class Connection:
             capability='charging'
             return await self._setViaAPI((API_ACTIONS+'/{mode}').format(baseurl=baseurl, vin=vin, capability=capability, mode=mode), json=data)
         else:
-            _LOGGER.error(f'Not yet implemented. Mode: {mode}. Command ignored')
+            self._LOGGER.error(f'Not yet implemented. Mode: {mode}. Command ignored')
             raise
 
     async def setClimater(self, vin, baseurl, mode, data, spin) -> dict | bool:
@@ -1508,7 +1529,7 @@ class Connection:
         try:
             # Only get security token if auxiliary heater is to be started
             if data.get('action', {}).get('settings', {}).get('heaterSource', None) == 'auxiliary':
-                _LOGGER.error(f'This action is not yet implemented: {data.get('action', {}).get('settings', {}).get('heaterSource', None)}. Command ignored')
+                self._LOGGER.error(f'This action is not yet implemented: {data.get('action', {}).get('settings', {}).get('heaterSource', None)}. Command ignored')
                 #self._session_headers['X-securityToken'] = await self.get_sec_token(vin=vin, spin=spin, action='rclima', baseurl=baseurl)
                 pass
             if mode == "stop": # Stop climatisation
@@ -1535,7 +1556,7 @@ class Connection:
             elif mode == "auxiliary_stop": # Stop auxiliary climatisation
                 return await self._setViaAPI((API_AUXILIARYHEATING+'/stop').format(baseurl=baseurl, vin=vin))
             else: # Unknown modes
-                _LOGGER.error(f'Unbekannter setClimater mode: {mode}. Command ignored')
+                self._LOGGER.error(f'Unbekannter setClimater mode: {mode}. Command ignored')
                 return False
         except:
             raise
@@ -1545,7 +1566,7 @@ class Connection:
         """Set climatisation timers."""
         try:
             capability = 'climatisation'
-            url= (API_REQUESTS+'/timers').format(baseurl=baseurl, vin=vin)
+            url= (API_REQUESTS+'/timers').format(baseurl=baseurl, vin=vin, capability=capability)
             return await self._setViaPUTtoAPI(url, json = data)
         except:
             raise
@@ -1602,30 +1623,30 @@ class Connection:
             url= API_DESTINATION.format(baseurl=baseurl, vin=vin)
             response = await self._request(METH_PUT, url, json=data)
             if response.status==202: #[202 Accepted]
-                _LOGGER.debug(f'Destination {data[0]} successfully sent to API.')
+                self._LOGGER.debug(f'Destination {data[0]} successfully sent to API.')
                 return response
             else:
-                _LOGGER.debug(f'API did not successfully receive destination.')
+                self._LOGGER.debug(f'API did not successfully receive destination.')
                 raise SeatException(f'Invalid or no response for endpoint {url}')
                 return response
         except aiohttp.client_exceptions.ClientResponseError as error:
-            _LOGGER.debug(f'Request failed. Data: {data}, HTTP request headers: {self._session_headers}')
+            self._LOGGER.debug(f'Request failed. Data: {data}, HTTP request headers: {self._session_headers}')
             if error.status == 401:
-                _LOGGER.error('Unauthorized')
+                self._LOGGER.error('Unauthorized')
             elif error.status == 400:
-                _LOGGER.error(f'Bad request')
+                self._LOGGER.error(f'Bad request')
             elif error.status == 429:
-                _LOGGER.warning('Too many requests. Further requests can only be made after the end of next trip in order to protect your vehicles battery.')
+                self._LOGGER.warning('Too many requests. Further requests can only be made after the end of next trip in order to protect your vehicles battery.')
                 return 429
             elif error.status == 500:
-                _LOGGER.error('Internal server error, server might be temporarily unavailable')
+                self._LOGGER.error('Internal server error, server might be temporarily unavailable')
             elif error.status == 502:
-                _LOGGER.error('Bad gateway, this function may not be implemented for this vehicle')
+                self._LOGGER.error('Bad gateway, this function may not be implemented for this vehicle')
             else:
-                _LOGGER.error(f'Unhandled HTTP exception: {error}')
+                self._LOGGER.error(f'Unhandled HTTP exception: {error}')
             #return False
         except Exception as error:
-            _LOGGER.error(f'Error: {error}')
+            self._LOGGER.error(f'Error: {error}')
             raise
         return False
 
@@ -1696,10 +1717,10 @@ class Connection:
             if expires > now:
                 return expires
             else:
-                _LOGGER.debug(f'Token expired at {expires.strftime("%Y-%m-%d %H:%M:%S")}')
+                self._LOGGER.debug(f'Token expired at {expires.strftime("%Y-%m-%d %H:%M:%S")}')
                 return datetime.min # Return value datetime.min means that the token is not valid
         except Exception as e:
-            _LOGGER.info(f'Token validation failed, {e}')
+            self._LOGGER.info(f'Token validation failed, {e}')
         return datetime.min # Return value datetime.min means that the token is not valid
 
     async def verify_token(self, token) -> bool:
@@ -1720,11 +1741,11 @@ class Connection:
 
             if not isinstance(aud, str):
                 aud = next(iter(aud))
-            _LOGGER.debug(f"Verifying token for {aud}")
+            self._LOGGER.debug(f"Verifying token for {aud}")
             # If audience indicates a client from https://identity.vwgroup.io
             for client in CLIENT_LIST:
                 if self._session_fulldebug:
-                    _LOGGER.debug(f"Matching {aud} against {CLIENT_LIST[client].get('CLIENT_ID', '')}")
+                    self._LOGGER.debug(f"Matching {aud} against {CLIENT_LIST[client].get('CLIENT_ID', '')}")
                 if aud == CLIENT_LIST[client].get('CLIENT_ID', ''):
                     req = await self._session.get(url = AUTH_TOKENKEYS)
                     break
@@ -1743,7 +1764,7 @@ class Connection:
             token_kid = jwt.get_unverified_header(token)['kid']
             if self._session_fulldebug:
                 try:
-                    _LOGGER.debug(f'Token Key ID is {token_kid}, match from public keys: {keys["keys"][token_kid]}')
+                    self._LOGGER.debug(f'Token Key ID is {token_kid}, match from public keys: {keys["keys"][token_kid]}')
                 except:
                     pass
             pubkey = pubkeys[token_kid]
@@ -1754,14 +1775,14 @@ class Connection:
         except ExpiredSignatureError:
             return False
         except Exception as error:
-            _LOGGER.debug(f'Failed to verify {aud} token, error: {error}')
+            self._LOGGER.debug(f'Failed to verify {aud} token, error: {error}')
         return False
 
     async def refresh_token(self, client) -> bool:
         """Function to refresh tokens for a client."""
         try:
             # Refresh API tokens
-            _LOGGER.debug(f'Refreshing tokens for client "{client}"')
+            self._LOGGER.debug(f'Refreshing tokens for client "{client}"')
             if client != 'vwg':
                 body = {
                     'grant_type': 'refresh_token',
@@ -1773,7 +1794,7 @@ class Connection:
                 self._session_token_headers[client]['User-ID']=self._user_id
                 self._session_headers['User-ID']=self._user_id
             else:
-                _LOGGER.error(f'refresh_token() does not support client \'{client}\' ')
+                self._LOGGER.error(f'refresh_token() does not support client \'{client}\' ')
                 raise
             #    body = {
             #        'grant_type': 'refresh_token',
@@ -1796,26 +1817,26 @@ class Connection:
                 # Verify access_token
                 if 'access_token' in tokens:
                     if not await self.verify_token(tokens['access_token']):
-                        _LOGGER.warning('Tokens could not be verified!')
+                        self._LOGGER.warning('Tokens could not be verified!')
                 for token in tokens:
                     self._session_tokens[client][token] = tokens[token]
                 return True
             elif response.status == 400:
                 error = await response.json()
                 if error.get('error', {}) == 'invalid_grant':
-                    _LOGGER.debug(f'VW-Group API token refresh failed: {error.get("error_description", {})}')
+                    self._LOGGER.debug(f'VW-Group API token refresh failed: {error.get("error_description", {})}')
                     #if client == 'vwg':
                     #    return await self._getAPITokens()
                 else:
-                    _LOGGER.debug(f'API token refresh failed. Error: {error}')
+                    self._LOGGER.debug(f'API token refresh failed. Error: {error}')
             else:
                 resp = await response.json()
-                _LOGGER.warning(f'Something went wrong when refreshing tokens for "{client}".')
-                _LOGGER.debug(f'Headers: {TOKEN_HEADERS.get(client)}')
-                _LOGGER.debug(f'Request Body: {body}')
-                _LOGGER.warning(f'Something went wrong when refreshing VW-Group API tokens.')
+                self._LOGGER.warning(f'Something went wrong when refreshing tokens for "{client}".')
+                self._LOGGER.debug(f'Headers: {TOKEN_HEADERS.get(client)}')
+                self._LOGGER.debug(f'Request Body: {body}')
+                self._LOGGER.warning(f'Something went wrong when refreshing VW-Group API tokens.')
         except Exception as error:
-            _LOGGER.warning(f'Could not refresh tokens: {error}')
+            self._LOGGER.warning(f'Could not refresh tokens: {error}')
         return False
 
     async def set_token(self, client) -> bool:
@@ -1825,13 +1846,13 @@ class Connection:
             # If no tokens are available for client, try to authorize
             tokens = self._session_tokens.get(client, None)
             if tokens is None:
-                _LOGGER.debug(f'Client "{client}" token is missing, call to authorize the client.')
+                self._LOGGER.debug(f'Client "{client}" token is missing, call to authorize the client.')
                 try:
                     # Try to authorize client and get tokens
                     if client != 'vwg':
                         result = await self._authorize(client)
                     else:
-                        _LOGGER.error('getAPITokens() commented out.')
+                        self._LOGGER.error('getAPITokens() commented out.')
                         result = False
                         #result = await self._getAPITokens()
 
@@ -1844,18 +1865,18 @@ class Connection:
                 # Validate access token for client, refresh if validation fails
                 valid = await self.validate_token(self._session_tokens.get(client, {}).get('access_token', ''))
                 if valid == datetime.min:
-                    _LOGGER.debug(f'Tokens for "{client}" are invalid')
+                    self._LOGGER.debug(f'Tokens for "{client}" are invalid')
                     # Try to refresh tokens for client
                     if await self.refresh_token(client) is not True:
                         raise SeatTokenExpiredException(f'Tokens for client {client} are invalid')
                     else:
-                        _LOGGER.debug(f'Tokens refreshed successfully for client "{client}"')
+                        self._LOGGER.debug(f'Tokens refreshed successfully for client "{client}"')
                         pass
                 else:
                     try:
                         #dt = datetime.fromtimestamp(valid)
-                        #_LOGGER.debug(f'Access token for "{client}" is valid until {dt.strftime("%Y-%m-%d %H:%M:%S")}')
-                        _LOGGER.debug(f'Access token for "{client}" is valid until {valid.strftime("%Y-%m-%d %H:%M:%S")}')
+                        #self._LOGGER.debug(f'Access token for "{client}" is valid until {dt.strftime("%Y-%m-%d %H:%M:%S")}')
+                        self._LOGGER.debug(f'Access token for "{client}" is valid until {valid.strftime("%Y-%m-%d %H:%M:%S")}')
                     except:
                         pass
                 # Assign token to authorization header

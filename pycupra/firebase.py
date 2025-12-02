@@ -18,8 +18,13 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 class Firebase():
-    def __init__(self):
+    def __init__(self, logPrefix=None):
         self._pushClient = None
+        if logPrefix!= None:
+            self._LOGGER= logging.getLogger(__name__+"_"+logPrefix)
+        else:
+            self._LOGGER = _LOGGER
+
 
     async def firebaseStart(self, onNotificationFunc, firebaseCredentialsFileName: str, brand='cupra') -> bool: 
         """ Starts the firebase cloud messaging receiver """
@@ -41,12 +46,12 @@ class Firebase():
             fcm_config = FcmRegisterConfig(fcm_project_id, fcm_app_id, fcm_api_key, fcmMessageSenderId)
             self._pushClient = FcmPushClient(onNotificationFunc, fcm_config, credentials, onFCMCredentialsUpdated)
             fcm_token = await self._pushClient.checkin_or_register(firebaseCredentialsFileName)
-            _LOGGER.debug(f'Firebase.checkin_or_register() returned a token:{fcm_token}')
+            self._LOGGER.debug(f'Firebase.checkin_or_register() returned a token:{fcm_token}')
             await self._pushClient.start()
             await asyncio.sleep(5)
             return self._pushClient.is_started()
         except Exception as e:
-            _LOGGER.error(f'Error in firebaseStart. Error: {e}')
+            self._LOGGER.error(f'Error in firebaseStart. Error: {e}')
             return False
 
     async def firebaseStop(self) -> bool: 
@@ -57,7 +62,7 @@ class Firebase():
             self._pushClient = None
             return True
         except Exception as e:
-            _LOGGER.error(f'Error in firebaseStop. Error: {e}')
+            self._LOGGER.error(f'Error in firebaseStop. Error: {e}')
             return False
 
 def readFCMCredsFile(credsFile) -> dict[str, Any]:

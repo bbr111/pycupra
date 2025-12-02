@@ -27,6 +27,11 @@ class Instrument:
         return camel2slug(self.attr.replace(".", "_"))
 
     def setup(self, vehicle, **config) -> bool:
+        if vehicle._logPrefix!= None:
+            self._LOGGER= logging.getLogger(__name__+"_"+vehicle._logPrefix)
+        else:
+            self._LOGGER = _LOGGER
+
         self.vehicle = vehicle
         if not self.is_supported:
             return False
@@ -55,7 +60,7 @@ class Instrument:
         if hasattr(self.vehicle, self.attr):
             return getattr(self.vehicle, self.attr)
         else:
-            _LOGGER.debug(f'Could not find attribute "{self.attr}"')
+            self._LOGGER.debug(f'Could not find attribute "{self.attr}"')
         return self.vehicle.get_attr(self.attr)
 
     @property
@@ -161,7 +166,7 @@ class BinarySensor(Instrument):
         if self.device_class == "plug":
             return "Connected" if self.state else "Disconnected"
         if self.state is None:
-            _LOGGER.error(f"Can not encode state {self.attr} {self.state}")
+            self._LOGGER.error(f"Can not encode state {self.attr} {self.state}")
             return "?"
         return "On" if self.state else "Off"
 
@@ -249,7 +254,7 @@ class ElectricClimatisationClimate(Climate):
     @property
     def hvac_mode(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the electric climatisation climate mode to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the electric climatisation climate mode to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('electric_climatisation', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('electric_climatisation', None)
         return self.vehicle.electric_climatisation
@@ -257,7 +262,7 @@ class ElectricClimatisationClimate(Climate):
     @property
     def target_temperature(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the climatisation target temperature to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the climatisation target temperature to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('climatisation_target_temperature', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('climatisation_target_temperature', None)
         return self.vehicle.climatisation_target_temperature
@@ -278,7 +283,7 @@ class AuxiliaryClimatisationClimate(Climate):
     @property
     def hvac_mode(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the auxiliary climatisation climate mode to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the auxiliary climatisation climate mode to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('auxiliary_climatisation', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('auxiliary_climatisation', None)
         return self.vehicle.auxiliary_climatisation
@@ -286,7 +291,7 @@ class AuxiliaryClimatisationClimate(Climate):
     @property
     def target_temperature(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the climatisation target temperature to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the auxiliary climatisation target temperature to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('climatisation_target_temperature', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('climatisation_target_temperature', None)
         return self.vehicle.climatisation_target_temperature
@@ -394,7 +399,7 @@ class DoorLock(Instrument):
                 self.callback()
             return response
         except Exception as e:
-            _LOGGER.error(f"Lock failed: {e}")
+            self._LOGGER.error(f"Lock failed: {e}")
             return False
 
     async def unlock(self):
@@ -405,7 +410,7 @@ class DoorLock(Instrument):
                 self.callback()
             return response
         except Exception as e:
-            _LOGGER.error(f"Unlock failed: {e}")
+            self._LOGGER.error(f"Unlock failed: {e}")
             return False
 
     @property
@@ -505,7 +510,7 @@ class RequestRefresh(Switch):
         return False #self.vehicle.refresh_data
 
     async def turn_on(self) -> None:
-        _LOGGER.debug('User has called RequestRefresh().')
+        self._LOGGER.debug('User has called RequestRefresh().')
         await self.vehicle.set_refresh()
         #await self.vehicle.update(updateType=1) #full update after set_refresh
         #if self.callback is not None:
@@ -531,7 +536,7 @@ class RequestUpdate(Switch):
         return False #self.vehicle.update
 
     async def turn_on(self) -> None:
-        _LOGGER.debug('User has called RequestUpdate().')
+        self._LOGGER.debug('User has called RequestUpdate().')
         await self.vehicle.update(updateType=1) #full update after set_refresh
         if self.callback is not None:
             self.callback()
@@ -553,7 +558,7 @@ class RequestUpdateButton(Button): #RequestUpdate as a button (because some user
         super().__init__(attr="update_data_button", name="Request full update button", icon="mdi:timer-refresh")
 
     async def press(self) -> None:
-        _LOGGER.debug('User has called RequestUpdateButton().')
+        self._LOGGER.debug('User has called RequestUpdateButton().')
         await self.vehicle.update(updateType=1) #full update after set_refresh
         if self.callback is not None:
             self.callback()
@@ -571,7 +576,7 @@ class RequestRefreshButton(Button): #RequestRefresh as a button (because some us
         super().__init__(attr="refresh_data_button", name="Request wakeup vehicle button", icon="mdi:car-connected")
 
     async def press(self) -> None:
-        _LOGGER.debug('User has called RequestRefreshButton().')
+        self._LOGGER.debug('User has called RequestRefreshButton().')
         await self.vehicle.set_refresh()
         #await self.vehicle.update(updateType=1) #full update after set_refresh
         #if self.callback is not None:
@@ -593,7 +598,7 @@ class ElectricClimatisation(Switch):
     @property
     def state(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the electric climatisation switch to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the electric climatisation switch to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('electric_climatisation', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('electric_climatisation', None)
         return self.vehicle.electric_climatisation
@@ -631,7 +636,7 @@ class AuxiliaryClimatisation(Switch):
     @property
     def state(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the auxiliary climatisation switch to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the auxiliary climatisation switch to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('auxiliary_climatisation', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('auxiliary_climatisation', None)
         return self.vehicle.auxiliary_climatisation
@@ -660,7 +665,7 @@ class Charging(Switch):
     @property
     def state(self):
         if self.vehicle._requests.get('batterycharge', {}).get('id', False):
-            _LOGGER.debug('A charging request is active. Setting the charging switch to new wanted state (if present).')
+            self._LOGGER.debug('A charging request is active. Setting the charging switch to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('batterycharge',{}).get('charging', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('batterycharge',{}).get('charging', None)
         return self.vehicle.charging
@@ -689,7 +694,7 @@ class WindowHeater(Switch):
     @property
     def state(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the window heater switch to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the window heater switch to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('window_heater', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('window_heater', None)
         return self.vehicle.window_heater
@@ -719,7 +724,7 @@ class SeatHeating(Switch):
     @property
     def state(self):
         #if self.vehicle._requests.get('climatisation', {}).get('id', False):
-        #    _LOGGER.debug('A climatisation request is active. Setting the seat heating switch to new wanted state (if present).')
+        #    self._LOGGER.debug('A climatisation request is active. Setting the seat heating switch to new wanted state (if present).')
         #    if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('seat_heating', None)!=None:
         #        return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('seat_heating', None)
         return self.vehicle.seat_heating
@@ -750,7 +755,7 @@ class BatteryClimatisation(Switch):
     @property
     def state(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the off-grid climatisation switch to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the off-grid climatisation switch to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('climatisationWithoutExternalPower', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('climatisationWithoutExternalPower', None)
         return self.vehicle.climatisation_without_external_power
@@ -780,7 +785,7 @@ class ClimatisationSettingZoneFrontLeft(Switch):
     @property
     def state(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the zone front left enabled switch to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the zone front left enabled switch to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('zoneFrontLeftEnabled', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('zoneFrontLeftEnabled', None)
         return self.vehicle.climatisation_zone_front_left
@@ -808,7 +813,7 @@ class ClimatisationSettingZoneFrontRight(Switch):
     @property
     def state(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the zone front right enabled switch to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the zone front right enabled switch to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('zoneFrontRightEnabled', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('zoneFrontRightEnabled', None)
         return self.vehicle.climatisation_zone_front_right
@@ -837,7 +842,7 @@ class ClimatisationSettingAtUnlock(Switch):
     @property
     def state(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the climatisation at unlock switch to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the climatisation at unlock switch to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('climatisationAtUnlock', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('climatisationAtUnlock', None)
         return self.vehicle.climatisation_at_unlock
@@ -866,7 +871,7 @@ class ClimatisationSettingWindowHeatingEnabled(Switch):
     @property
     def state(self):
         if self.vehicle._requests.get('climatisation', {}).get('id', False):
-            _LOGGER.debug('A climatisation request is active. Setting the window heating enabled switch to new wanted state (if present).')
+            self._LOGGER.debug('A climatisation request is active. Setting the window heating enabled switch to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('windowHeatingEnabled', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('windowHeatingEnabled', None)
         return self.vehicle.climatisation_window_heating_enabled
@@ -953,7 +958,7 @@ class SlowCharge(Switch):
     @property
     def state(self):
         if self.vehicle._requests.get('batterycharge', {}).get('id', False):
-            _LOGGER.debug('A charging request is active. Setting the slow charge switch to new wanted state (if present).')
+            self._LOGGER.debug('A charging request is active. Setting the slow charge switch to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('batterycharge',{}).get('settings',{}).get('slow_charge', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('batterycharge',{}).get('settings',{}).get('slow_charge', None)
         return self.vehicle.slow_charge
@@ -1009,12 +1014,12 @@ class Warnings(Sensor):
         return self.vehicle.engine
 
     async def turn_on(self):
-        _LOGGER.exception(f'turn_on not defined for "{self.attr}"')
+        self._LOGGER.exception(f'turn_on not defined for "{self.attr}"')
         #await self.vehicle.set_engine('start')
         #await self.vehicle.update() # hinterher auskommentieren
 
     async def turn_off(self):
-        _LOGGER.exception(f'turn_off not defined for "{self.attr}"')
+        self._LOGGER.exception(f'turn_off not defined for "{self.attr}"')
         #await self.vehicle.set_engine('stop')
         await self.vehicle.update() # hinterher auskommentieren
 
@@ -1034,18 +1039,18 @@ class ChargingBatteryCare(Switch):
     @property
     def state(self):
         if self.vehicle._requests.get('batterycharge', {}).get('id', False):
-            _LOGGER.debug('A charging request is active. Setting the charging battery care switch to new wanted state (if present).')
+            self._LOGGER.debug('A charging request is active. Setting the charging battery care switch to new wanted state (if present).')
             if self.vehicle._wantedStateOfProperty.get('batterycharge',{}).get('settings',{}).get('charging_battery_care', None)!=None:
                 return self.vehicle._wantedStateOfProperty.get('batterycharge',{}).get('settings',{}).get('charging_battery_care', None)
         return self.vehicle.charging_battery_care
 
     async def turn_on(self):
-        #_LOGGER.exception(f'turn_on not defined for "{self.attr}"')
+        #self._LOGGER.exception(f'turn_on not defined for "{self.attr}"')
         await self.vehicle.set_battery_care(True)
         #await self.vehicle.update() 
 
     async def turn_off(self):
-        #_LOGGER.exception(f'turn_off not defined for "{self.attr}"')
+        #self._LOGGER.exception(f'turn_off not defined for "{self.attr}"')
         await self.vehicle.set_battery_care(False)
         #await self.vehicle.update() 
 
@@ -1493,14 +1498,14 @@ def create_instruments():
             name="Minimum charge level",
             icon="mdi:battery-positive",
             unit="%",
-            device_class="battery"
+            #device_class="battery"
         ),
         Sensor(
             attr="target_soc",
             name="Target state of charge",
             icon="mdi:battery-positive",
             unit="%",
-            device_class="battery"
+            #device_class="battery"
         ),
         Sensor(
             attr="adblue_level",
@@ -1949,11 +1954,16 @@ def create_instruments():
 
 class Dashboard:
     def __init__(self, vehicle, **config):
+        if vehicle._logPrefix!= None:
+            self._LOGGER= logging.getLogger(__name__+"_"+vehicle._logPrefix)
+        else:
+            self._LOGGER = _LOGGER
+
         self._config = config
         self.instruments = [
             instrument
             for instrument in create_instruments()
             if instrument.setup(vehicle, **config)
         ]
-        _LOGGER.debug("Supported instruments: " + ", ".join(str(inst.attr) for inst in self.instruments))
+        self._LOGGER.debug("Supported instruments: " + ", ".join(str(inst.attr) for inst in self.instruments))
 
