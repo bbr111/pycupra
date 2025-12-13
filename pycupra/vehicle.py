@@ -118,10 +118,6 @@ class Vehicle:
   # Init and update vehicle data
     async def discover(self) -> None:
         """Discover vehicle and initial data."""
-        #await asyncio.gather(
-        #    self.get_basiccardata(),
-        #    return_exceptions=True
-        #)
         # Extract information of relevant capabilities
         if self._capabilities != None:
             for capa in self._capabilities:
@@ -205,14 +201,6 @@ class Vehicle:
 
                 if self.firebaseStatus == FIREBASE_STATUS_ACTIVATION_STOPPED:
                     # Trying to activate firebase connection again
-                    """self._LOGGER.debug(f'As firebase status={self.firebaseStatus}, fcmpushclient.start() is called.')
-                    await self.firebase._pushClient.start()
-                    #await asyncio.sleep(5)
-                    if self.firebase._pushClient.is_started():
-                        self.firebaseStatus = FIREBASE_STATUS_ACTIVATED
-                        self._LOGGER.debug(f'Successfully restarted push client. New firebase status={self.firebaseStatus}')
-                    else:
-                        self._LOGGER.warning(f'Restart of push client failed. Firebase status={self.firebaseStatus}')"""
                     newStatus = await self.stopFirebase()
                     if newStatus != FIREBASE_STATUS_NOT_INITIALISED:
                         self._LOGGER.debug(f'stopFirebase() not successful.')
@@ -447,26 +435,6 @@ class Vehicle:
                 self._LOGGER.debug('Could not fetch timers')
         return False
 
-    #async def wait_for_request(self, section, request, retryCount=36):
-        """Update status of outstanding requests."""
-        """retryCount -= 1
-        if (retryCount == 0):
-            self._LOGGER.info(f'Timeout while waiting for result of {request}.')
-            return 'Timeout'
-        try:
-            status = await self._connection.get_request_status(self.vin, section, request, self._apibase)
-            self._LOGGER.info(f'Request for {section} with ID {request}: {status}')
-            if status == 'In progress':
-                self._requests['state'] = 'In progress'
-                await asyncio.sleep(5)
-                return await self.wait_for_request(section, request, retryCount)
-            else:
-                self._requests['state'] = status
-                return status
-        except Exception as error:
-            self._LOGGER.warning(f'Exception encountered while waiting for request status: {error}')
-            return 'Exception'"""
-
   # Data set functions
    # API endpoint charging
     async def set_charger_current(self, value) -> bool:
@@ -571,14 +539,6 @@ class Vehicle:
             raise SeatInvalidRequestException('Remote start/stop of charger is not supported.')
         if self.checkForRunningRequests('batterycharge'):
             raise SeatRequestInProgressException('Charging action already in progress')
-        #if self._requests['batterycharge'].get('id', False):
-        #    timestamp = self._requests.get('batterycharge', {}).get('timestamp', datetime.now())
-        #    expired = datetime.now() - timedelta(minutes=1)
-        #    if expired > timestamp:
-        #        self._requests.get('batterycharge', {}).pop('id')
-        #        self.cleanWantedStateOfProperty('batterycharge') # clean the charging elements of self._wantedStateOfProperty
-        #    else:
-        #        raise SeatRequestInProgressException('Charging action already in progress')
         if self._relevantCapabilties.get('charging', {}).get('active', False):
             if action in ['start', 'Start', 'On', 'on']:
                 mode='start'
@@ -848,13 +808,6 @@ class Vehicle:
             raise SeatInvalidRequestException('Departure timers are not supported.')
         if self.checkForRunningRequests('departuretimer'):
             raise SeatRequestInProgressException('Scheduling of departure timer is already in progress')
-        #if self._requests['departuretimer'].get('id', False):
-        #    timestamp = self._requests.get('departuretimer', {}).get('timestamp', datetime.now())
-        #    expired = datetime.now() - timedelta(minutes=1)
-        #    if expired > timestamp:
-        #        self._requests.get('departuretimer', {}).pop('id')
-        #    else:
-        #        raise SeatRequestInProgressException('Scheduling of departure timer is already in progress')
 
         try:
             self._requests['latest'] = 'Departuretimer'
@@ -1047,13 +1000,6 @@ class Vehicle:
             raise SeatInvalidRequestException('Departure profiles are not supported.')
         if self.checkForRunningRequests('departureprofile'):
             raise SeatRequestInProgressException('Scheduling of departure profile is already in progress')
-        #if self._requests['departureprofile'].get('id', False):
-        #    timestamp = self._requests.get('departureprofile', {}).get('timestamp', datetime.now())
-        #    expired = datetime.now() - timedelta(minutes=1)
-        #    if expired > timestamp:
-        #        self._requests.get('departureprofile', {}).pop('id')
-        #    else:
-        #        raise SeatRequestInProgressException('Scheduling of departure profile is already in progress')
         try:
             self._requests['latest'] = 'Departureprofile'
             converted_data = datetime2string(data, True) # datetime to string
@@ -1269,13 +1215,6 @@ class Vehicle:
             raise SeatInvalidRequestException('Remote control of auxiliary heating functions is not supported.')
         if self.checkForRunningRequests('climatisation'):
             raise SeatRequestInProgressException('A climatisation action is already in progress')
-        #if self._requests['climatisation'].get('id', False):
-        #    timestamp = self._requests.get('climatisation', {}).get('timestamp', datetime.now())
-        #    expired = datetime.now() - timedelta(minutes=1)
-        #    if expired > timestamp:
-        #        self._requests.get('climatisation', {}).pop('id')
-        #    else:
-        #        raise SeatRequestInProgressException('A climatisation action is already in progress')
         try:
             self._requests['latest'] = 'Climatisation'
             response = await self._connection.setClimater(self.vin, self._apibase, mode, data, spin)
@@ -1470,13 +1409,6 @@ class Vehicle:
             raise SeatInvalidRequestException('Climatisation timers are not supported.')
         if self.checkForRunningRequests('climatisationtimer'):
             raise SeatRequestInProgressException('Scheduling of climatisation timer is already in progress')
-        #if self._requests['climatisationtimer'].get('id', False):
-        #    timestamp = self._requests.get('climatisationtimer', {}).get('timestamp', datetime.now())
-        #    expired = datetime.now() - timedelta(minutes=1)
-        #    if expired > timestamp:
-        #        self._requests.get('climatisationtimer', {}).pop('id')
-        #    else:
-        #        raise SeatRequestInProgressException('Scheduling of climatisation timer is already in progress')
 
         try:
             self._requests['latest'] = 'Climatisationtimer'
@@ -1620,13 +1552,6 @@ class Vehicle:
             raise SeatInvalidRequestException('Auxiliary heating timers are not supported.')
         if self.checkForRunningRequests('climatisationtimer'):
             raise SeatRequestInProgressException('Scheduling of auxiliary heating timer is already in progress')
-        #if self._requests['climatisationtimer'].get('id', False):
-        #    timestamp = self._requests.get('climatisationtimer', {}).get('timestamp', datetime.now())
-        #    expired = datetime.now() - timedelta(minutes=1)
-        #    if expired > timestamp:
-        #        self._requests.get('climatisationtimer', {}).pop('id')
-        #    else:
-        #        raise SeatRequestInProgressException('Scheduling of auxiliary heating timer is already in progress')
 
         try:
             self._requests['latest'] = 'Climatisationtimer'
@@ -1691,13 +1616,6 @@ class Vehicle:
             raise SeatInvalidRequestException('No parking heater support.')
         if self.checkForRunningRequests('preheater'):
             raise SeatRequestInProgressException('A parking heater action is already in progress')
-        #if self._requests['preheater'].get('id', False):
-        #    timestamp = self._requests.get('preheater', {}).get('timestamp', datetime.now())
-        #    expired = datetime.now() - timedelta(minutes=1)
-        #    if expired > timestamp:
-        #        self._requests.get('preheater', {}).pop('id')
-        #    else:
-        #        raise SeatRequestInProgressException('A parking heater action is already in progress')
         if not mode in ['heating', 'ventilation', 'off']:
             self._LOGGER.error(f'{mode} is an invalid action for parking heater')
             raise SeatInvalidRequestException(f'{mode} is an invalid action for parking heater')
@@ -1737,13 +1655,6 @@ class Vehicle:
             raise SeatInvalidRequestException('Remote lock/unlock is not supported.')
         if self.checkForRunningRequests('lock'):
             raise SeatRequestInProgressException('A lock action is already in progress')
-        #if self._requests['lock'].get('id', False):
-        #    timestamp = self._requests.get('lock', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
-        #    expired = datetime.now() - timedelta(minutes=1)
-        #    if expired > timestamp:
-        #        self._requests.get('lock', {}).pop('id')
-        #    else:
-        #        raise SeatRequestInProgressException('A lock action is already in progress')
         if action not in ['lock', 'unlock']:
             self._LOGGER.error(f'Invalid lock action: {action}')
             raise SeatInvalidRequestException(f'Invalid lock action: {action}')
@@ -1799,13 +1710,6 @@ class Vehicle:
             raise SeatInvalidRequestException('Remote honk and flash is not supported.')
         if self.checkForRunningRequests('honkandflash'):
             raise SeatRequestInProgressException('A honk and flash is already in progress')
-        #if self._requests['honkandflash'].get('id', False):
-        #    timestamp = self._requests.get('honkandflash', {}).get('timestamp', datetime.now() - timedelta(minutes=2))
-        #    expired = datetime.now() - timedelta(minutes=1)
-        #    if expired > timestamp:
-        #        self._requests.get('honkandflash', {}).pop('id')
-        #    else:
-        #        raise SeatRequestInProgressException('A honk and flash action is already in progress')
         if action == 'flash':
             operationCode = 'flash'
         elif action == 'honkandflash':
@@ -1858,13 +1762,6 @@ class Vehicle:
            raise SeatInvalidRequestException('Data refresh is not supported.')
         if self.checkForRunningRequests('refresh'):
             raise SeatRequestInProgressException('Last data refresh request is less than 1 minute ago')
-        #if self._requests['refresh'].get('id', False):
-        #    timestamp = self._requests.get('refresh', {}).get('timestamp', datetime.now() - timedelta(minutes=5))
-        #    expired = datetime.now() - timedelta(minutes=1)
-        #    if expired > timestamp:
-        #        self._requests.get('refresh', {}).pop('id')
-        #    else:
-        #        raise SeatRequestInProgressException('Last data refresh request less than 3 minutes ago')
         try:
             self._requests['latest'] = 'Refresh'
             response = await self._connection.setRefresh(self.vin, self._apibase)
@@ -1960,19 +1857,12 @@ class Vehicle:
             if self._connectivities.get('mode','')=='online':
                 return False
         return True
-        #for car in self.attrs.get('realCars', []):
-        #    if self.vin == car.get('vehicleIdentificationNumber', ''):
-        #        return car.get('deactivated', False)
 
     @property
     def is_deactivated_supported(self) -> bool:
         if 'mode' in self._connectivities:
             return True
         return False
-        #for car in self.attrs.get('realCars', []):
-        #    if self.vin == car.get('vehicleIdentificationNumber', ''):
-        #        if car.get('deactivated', False):
-        #            return True
 
     @property
     def brand(self):
@@ -2347,13 +2237,6 @@ class Vehicle:
             else:
                 minutes = 0
             return minutes
-            #try:
-            #    if minutes == -1: return '00:00'
-            #    if minutes == 65535: return '00:00'
-            #    return "%02d:%02d" % divmod(minutes, 60)
-            #except Exception:
-            #    pass
-        #return '00:00'
         return 0
 
     @property
@@ -2746,21 +2629,8 @@ class Vehicle:
         minutes = 0
         if self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('remainingClimatisationTimeInMinutes', False):
             minutes = self.attrs.get('climater', {}).get('status', {}).get('climatisationStatus', {}).get('remainingClimatisationTimeInMinutes', 0)
-            #try:
-            #    if not 0 <= minutes <= 65535:
-            #        return "00:00"
-            #    return "%02d:%02d" % divmod(minutes, 60)
-            #except Exception:
-            #    pass
         if self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('remainingClimatisationTimeInMinutes', False):
             minutes = self.attrs.get('climater', {}).get('status', {}).get('auxiliaryHeatingStatus', {}).get('remainingClimatisationTimeInMinutes', 0)
-            #try:
-            #    if not 0 <= minutes <= 65535:
-            #        return "00:00"
-            #    return "%02d:%02d" % divmod(minutes, 60)
-            #except Exception:
-            #    pass
-        #return "00:00"
         return minutes
 
     @property
@@ -3453,9 +3323,6 @@ class Vehicle:
                 data = {}
                 timerdata = self.attrs.get('departureProfiles', {}).get('timers', [])
                 timer = timerdata[0]
-                #timer.pop('timestamp', None)
-                #timer.pop('timerID', None)
-                #timer.pop('profileID', None)
                 data.update(timer)
                 return data
             except:
@@ -3477,9 +3344,6 @@ class Vehicle:
                 data = {}
                 timerdata = self.attrs.get('departureProfiles', {}).get('timers', [])
                 timer = timerdata[1]
-                #timer.pop('timestamp', None)
-                #timer.pop('timerID', None)
-                #timer.pop('profileID', None)
                 data.update(timer)
                 return data
             except:
@@ -3501,9 +3365,6 @@ class Vehicle:
                 data = {}
                 timerdata = self.attrs.get('departureProfiles', {}).get('timers', [])
                 timer = timerdata[2]
-                #timer.pop('timestamp', None)
-                #timer.pop('timerID', None)
-                #timer.pop('profileID', None)
                 data.update(timer)
                 return data
             except:
@@ -4178,6 +4039,8 @@ class Vehicle:
             self._LOGGER.info(f'Received notification {notification} again. Just acknoledging it, nothing to do.')
             return 
 
+        if 'error' in type:
+            self._LOGGER.warning(f'Warning. The newest push notification received (notification id={notification}) of type {type} contains the word error. ')
         self._firebaseLastMessageId = notification # save the id of the last notification
         if type in ('vehicle-access-locked-successful', 'vehicle-access-unlocked-successful'): # vehicle was locked/unlocked
             if self._requests.get('lock', {}).get('id', None):
@@ -4248,7 +4111,8 @@ class Vehicle:
                 # Wait 5 seconds
                 await asyncio.sleep(5)
         elif type in ('charging-status-changed', 'charging-started', 'charging-stopped', 'charging-settings-updated', 'charging-charge-mode-changed', 'charging-settings-changed',
-                      'charging-event-status-started', 'charging-finished', 'charging-profile-changed', 'charging-target-soc-reached'):
+                      'charging-event-status-started', 'charging-finished', 'charging-profile-changed', 'charging-target-soc-reached', 'charging-error-infrastructure',
+                      'charging-start-error'):
             if self._requests.get('batterycharge', {}).get('id', None):
                 openRequest= self._requests.get('batterycharge', {}).get('id', None)
                 if openRequest == requestId:
@@ -4265,7 +4129,7 @@ class Vehicle:
                 # Wait 5 seconds
                 await asyncio.sleep(5)
         elif type in ('climatisation-status-changed','climatisation-started', 'climatisation-stopped', 'climatisation-settings-updated', 'climatisation-error-fail',
-                      'climatisation-settings-changed', 'climatisation-window-heating-started', 'climatisation-window-heating-stopped',
+                      'climatisation-settings-changed', 'climatisation-window-heating-started', 'climatisation-window-heating-stopped', 'climatisation-settings-error', 
                       'climatisation-window-heating-start-failed', 'climatisation-window-heating-stop-failed', 'auxiliary-heating-started', 'auxiliary-heating-stopped'):
             if self._requests.get('climatisation', {}).get('id', None):
                 openRequest= self._requests.get('climatisation', {}).get('id', None)
@@ -4283,11 +4147,6 @@ class Vehicle:
                 # Wait 5 seconds
                 await asyncio.sleep(5)
         elif type in ('vehicle-area-alarm-vehicle-exits-zone-triggered', 'vehicle-area-alarm-vehicle-enters-zone-triggered'):
-            #if self._last_get_position < datetime.now(tz=None) - timedelta(seconds= 30):
-            #    # Update position data only if the last one is older than timedelta
-            #    await self.get_position()
-            #else:
-            #    self._LOGGER.debug(f'It is now {datetime.now(tz=None)}. Last get_position was at {self._last_get_position}. So no need to update.')
             if payload != '':
                 payloadDict = json.loads(payload) # Convert json string to dict
                 #self._LOGGER.debug(f'payloadDict is dict: {isinstance(payloadDict, dict)}')
@@ -4304,7 +4163,7 @@ class Vehicle:
             self._states.update(areaAlarm)
             if self.updateCallback:
                 await self.updateCallback(2)
-        elif type in ('vehicle-wake-up-succeeded', 'vehicle-wakeup-succeeded'):
+        elif type in ('vehicle-wake-up-succeeded', 'vehicle-wakeup-succeeded', 'vehicle-wakeup-failed'):
             if self._requests.get('refresh', {}).get('id', None):
                 openRequest= self._requests.get('refresh', {}).get('id', None)
                 if openRequest == requestId:

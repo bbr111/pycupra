@@ -28,7 +28,6 @@ from jwt.exceptions import ExpiredSignatureError
 import aiohttp
 from bs4 import BeautifulSoup
 from base64 import b64decode, b64encode, urlsafe_b64decode, urlsafe_b64encode
-#from .__version__ import __version__ as lib_version
 from .utilities import json_loads
 from .vehicle import Vehicle
 from .exceptions import (
@@ -252,19 +251,13 @@ class Connection:
   # API login/logout/authorization
     async def doLogin(self,**data) -> bool:
         """Login method, clean login or use token from file and refresh it"""
-        #if len(self._session_tokens) > 0:
-        #    self._LOGGER.info('Revoking old tokens.')
-        #    try:
-        #        await self.logout()
-        #    except:
-        #        pass
         self._LOGGER.info('doLogin() first tries to read tokens from file and to refresh them.')
 
         # Remove cookies and re-init session
         self._clear_cookies()
         self._vehicles.clear()
         self._session_tokens = {}
-        self._session_headers = HEADERS_SESSION.get(self._session_auth_brand, HEADERS_SESSION['cupra']).copy()
+        self._session_headers = HEADERS_SESSION.get(self._session_auth_brand, HEADERS_SESSION[self._session_auth_brand]).copy()
         self._session_auth_headers = HEADERS_AUTH.copy()
         self._session_nonce = self._getNonce()
         self._session_state = self._getState()
@@ -294,9 +287,6 @@ class Connection:
 
         # Login/Authorization starts here
         try:
-            #self._session_headers = HEADERS_SESSION.get(client).copy()
-            #self._session_auth_headers = HEADERS_AUTH.copy()
-
             self._LOGGER.debug('Checking for concurrent logins in progress')
 
             waitTimeExpired = datetime.now(tz=None) + timedelta(seconds= 15)
@@ -822,7 +812,7 @@ class Connection:
         """Fetch user profile."""
         await self.set_token(self._session_auth_brand)
         userData={}
-        #API_PERSONAL_DATA liefert fast das gleiche wie API_USER_INFO aber etwas weniger
+        #API_PERSONAL_DATA provide nearly the same information as API_USER_INFO but a little bit less
         try:
             response = await self.get(API_PERSONAL_DATA.format(userId= self._user_id))
             if response.get('nickname'):
@@ -1383,8 +1373,6 @@ class Connection:
         return False
 
  #### API data set functions ####
-    #async def get_request_status(self, vin, sectionId, requestId, baseurl):
- 
     async def get_sec_token(self, spin, baseurl) -> str:
         """Get a security token, required for certain set functions."""
         data = {'spin': spin}
@@ -1874,8 +1862,6 @@ class Connection:
                         pass
                 else:
                     try:
-                        #dt = datetime.fromtimestamp(valid)
-                        #self._LOGGER.debug(f'Access token for "{client}" is valid until {dt.strftime("%Y-%m-%d %H:%M:%S")}')
                         self._LOGGER.debug(f'Access token for "{client}" is valid until {valid.strftime("%Y-%m-%d %H:%M:%S")}')
                     except:
                         pass

@@ -31,10 +31,6 @@ class Firebase():
         try:
             loop = asyncio.get_running_loop()
             credentials = await loop.run_in_executor(None, readFCMCredsFile, firebaseCredentialsFileName)
-            #credentials = readFCMCredsFile(firebaseCredentialsFileName)
-
-            #if credentials == {}:
-            #    credentials =None
 
             fcm_project_id=FCM_PROJECT_ID
             fcm_app_id=FCM_APP_ID[brand]

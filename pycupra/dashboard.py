@@ -195,9 +195,12 @@ class Switch(Instrument):
     def __init__(self, attr, name, icon):
         super().__init__(component="switch", attr=attr, name=name, icon=icon)
 
+    def configurate(self, **config):
+        self.mutable = config.get('mutable', False)
+
     @property
     def is_mutable(self) -> bool:
-        return True
+        return self.mutable
 
     @property
     def str_state(self) -> str:
@@ -220,9 +223,12 @@ class Button(Instrument):
     def __init__(self, attr, name, icon):
         super().__init__(component="button", attr=attr, name=name, icon=icon)
 
+    def configurate(self, **config):
+        self.mutable = config.get('mutable', False)
+
     @property
     def is_mutable(self) -> bool:
-        return True
+        return self.mutable
 
     def press(self):
         pass
@@ -231,6 +237,13 @@ class Button(Instrument):
 class Climate(Instrument):
     def __init__(self, attr, name, icon):
         super().__init__(component="climate", attr=attr, name=name, icon=icon)
+
+    def configurate(self, **config):
+        self.mutable = config.get('mutable', False)
+
+    @property
+    def is_mutable(self) -> bool:
+        return self.mutable
 
     @property
     def hvac_mode(self):
@@ -374,10 +387,7 @@ class DoorLock(Instrument):
 
     def configurate(self, **config):
         self.spin = config.get('spin', '')
-
-    @property
-    def is_mutable(self) -> bool:
-        return True
+        self.mutable = config.get('mutable', False)
 
     @property
     def str_state(self) -> str:
@@ -501,6 +511,11 @@ class RequestRefresh(Switch):
     def __init__(self):
         super().__init__(attr="refresh_data", name="Request wakeup vehicle", icon="mdi:car-connected")
 
+    def configurate(self, **config):
+        # Request full update shall not be affected by the mutable option
+        self.mutable = True
+        pass
+
     @property
     def state(self):
         if self.vehicle.refresh_data != None:
@@ -530,6 +545,11 @@ class RequestRefresh(Switch):
 class RequestUpdate(Switch):
     def __init__(self):
         super().__init__(attr="update_data", name="Request full update", icon="mdi:timer-refresh")
+
+    def configurate(self, **config):
+        # Request full update shall not be affected by the mutable option
+        self.mutable = True
+        pass
 
     @property
     def state(self) -> bool:
@@ -632,6 +652,7 @@ class AuxiliaryClimatisation(Switch):
 
     def configurate(self, **config):
         self.spin = config.get('spin', '')
+        self.mutable = config.get('mutable', False)
 
     @property
     def state(self):
@@ -761,12 +782,10 @@ class BatteryClimatisation(Switch):
         return self.vehicle.climatisation_without_external_power
 
     async def turn_on(self):
-        #await self.vehicle.set_battery_climatisation(True) # will become obsolete
         await self.vehicle.set_climatisation_one_setting('climatisationWithoutExternalPower',True)
         #await self.vehicle.update()
 
     async def turn_off(self):
-        #await self.vehicle.set_battery_climatisation(False) # will become obsolete
         await self.vehicle.set_climatisation_one_setting('climatisationWithoutExternalPower',False)
         #await self.vehicle.update()
 
@@ -900,6 +919,7 @@ class PHeaterHeating(Switch):
     def configurate(self, **config):
         self.spin = config.get('spin', '')
         self.duration = config.get('combustionengineheatingduration', 30)
+        self.mutable = config.get('mutable', False)
 
     @property
     def state(self):
@@ -929,6 +949,7 @@ class PHeaterVentilation(Switch):
     def configurate(self, **config):
         self.spin = config.get('spin', '')
         self.duration = config.get('combustionengineclimatisationduration', 30)
+        self.mutable = config.get('mutable', False)
 
     @property
     def state(self):
@@ -1045,12 +1066,10 @@ class ChargingBatteryCare(Switch):
         return self.vehicle.charging_battery_care
 
     async def turn_on(self):
-        #self._LOGGER.exception(f'turn_on not defined for "{self.attr}"')
         await self.vehicle.set_battery_care(True)
         #await self.vehicle.update() 
 
     async def turn_off(self):
-        #self._LOGGER.exception(f'turn_off not defined for "{self.attr}"')
         await self.vehicle.set_battery_care(False)
         #await self.vehicle.update() 
 
@@ -1069,6 +1088,7 @@ class ClimatisationTimer1(Switch):
 
     def configurate(self, **config):
         self.spin = config.get('spin', '')
+        self.mutable = config.get('mutable', False)
 
     @property
     def state(self):
@@ -1106,6 +1126,7 @@ class ClimatisationTimer2(Switch):
 
     def configurate(self, **config):
         self.spin = config.get('spin', '')
+        self.mutable = config.get('mutable', False)
 
     @property
     def state(self):
@@ -1143,6 +1164,7 @@ class ClimatisationTimer3(Switch):
 
     def configurate(self, **config):
         self.spin = config.get('spin', '')
+        self.mutable = config.get('mutable', False)
 
     @property
     def state(self):
@@ -1178,9 +1200,6 @@ class DepartureTimer1(Switch):
     def __init__(self):
         super().__init__(attr="departure1", name="Departure timer 1", icon="mdi:radiator")
 
-    def configurate(self, **config):
-        self.spin = config.get('spin', '')
-
     @property
     def state(self):
         if self.vehicle.departure1 != None:
@@ -1211,9 +1230,6 @@ class DepartureTimer2(Switch):
     def __init__(self):
         super().__init__(attr="departure2", name="Departure timer 2", icon="mdi:radiator")
 
-    def configurate(self, **config):
-        self.spin = config.get('spin', '')
-
     @property
     def state(self):
         if self.vehicle.departure2 != None:
@@ -1242,9 +1258,6 @@ class DepartureTimer2(Switch):
 class DepartureTimer3(Switch):
     def __init__(self):
         super().__init__(attr="departure3", name="Departure timer 3", icon="mdi:radiator")
-
-    def configurate(self, **config):
-        self.spin = config.get('spin', '')
 
     @property
     def state(self):
@@ -1275,9 +1288,6 @@ class DepartureProfile1(Switch):
     def __init__(self):
         super().__init__(attr="departure_profile1", name="Departure profile 1", icon="mdi:radiator")
 
-    def configurate(self, **config):
-        self.spin = config.get('spin', '')
-
     @property
     def state(self):
         status = self.vehicle.departure_profile1.get("enabled", "")
@@ -1306,9 +1316,6 @@ class DepartureProfile2(Switch):
     def __init__(self):
         super().__init__(attr="departure_profile2", name="Departure profile 2", icon="mdi:radiator")
 
-    def configurate(self, **config):
-        self.spin = config.get('spin', '')
-
     @property
     def state(self):
         status = self.vehicle.departure_profile2.get("enabled", "")
@@ -1336,9 +1343,6 @@ class DepartureProfile2(Switch):
 class DepartureProfile3(Switch):
     def __init__(self):
         super().__init__(attr="departure_profile3", name="Departure profile 3", icon="mdi:radiator")
-
-    def configurate(self, **config):
-        self.spin = config.get('spin', '')
 
     @property
     def state(self):
