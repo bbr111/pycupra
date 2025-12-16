@@ -474,7 +474,7 @@ class Vehicle:
                 newValue = False
                 if data.get('maxChargeCurrentAc',None)=='reduced':
                     newValue= True
-                self.setWantedStateOfProperty('batterycharge', 'settings', 'slow_charge', newValue)
+                self.setWantedStateOfProperty('batterycharge', 'settings', 'slow_charge', value=newValue)
             return await self.set_charger('settings', data)
         else:
             self._LOGGER.error('No charger support.')
@@ -526,7 +526,7 @@ class Vehicle:
             else:
                 self._LOGGER.error(f'Data type passed is invalid.')
                 raise SeatInvalidRequestException(f'Invalid data type.')
-            self.setWantedStateOfProperty('batterycharge', 'settings', 'charging_battery_care', value)
+            self.setWantedStateOfProperty('batterycharge', 'settings', 'charging_battery_care', value=value)
             return await self.set_charger('update-battery-care', data)
         else:
             self._LOGGER.error('No charger support.')
@@ -542,10 +542,10 @@ class Vehicle:
         if self._relevantCapabilties.get('charging', {}).get('active', False):
             if action in ['start', 'Start', 'On', 'on']:
                 mode='start'
-                self.setWantedStateOfProperty('batterycharge', 'charging', True)
+                self.setWantedStateOfProperty('batterycharge', 'charging', value=True)
             elif action in ['stop', 'Stop', 'Off', 'off']:
                 mode='stop'
-                self.setWantedStateOfProperty('batterycharge', 'charging', False)
+                self.setWantedStateOfProperty('batterycharge', 'charging', value=False)
             elif action=='settings':
                 mode=action
             elif action=='update-settings' or action=='update-battery-care':
@@ -1131,17 +1131,17 @@ class Vehicle:
             if not self.checkForRunningRequests('climatisation'):
                 # set the wanted state of the property affected by the request
                 if settingName=='climatisationWithoutExternalPower':
-                    self.setWantedStateOfProperty('climatisation', 'settings', 'climatisationWithoutExternalPower', value)
+                    self.setWantedStateOfProperty('climatisation', 'settings', 'climatisationWithoutExternalPower', value=value)
                 elif settingName=='zoneFrontLeftEnabled':
-                    self.setWantedStateOfProperty('climatisation', 'settings', 'zoneFrontLeftEnabled', value)
+                    self.setWantedStateOfProperty('climatisation', 'settings', 'zoneFrontLeftEnabled', value=value)
                 elif settingName=='zoneFrontRightEnabled':
-                    self.setWantedStateOfProperty('climatisation', 'settings', 'zoneFrontRightEnabled', value)
+                    self.setWantedStateOfProperty('climatisation', 'settings', 'zoneFrontRightEnabled', value=value)
                 elif settingName=='climatisationAtUnlock':
-                    self.setWantedStateOfProperty('climatisation', 'settings', 'climatisationAtUnlock', value)
+                    self.setWantedStateOfProperty('climatisation', 'settings', 'climatisationAtUnlock', value=value)
                 elif settingName=='windowHeatingEnabled':
-                    self.setWantedStateOfProperty('climatisation', 'settings', 'windowHeatingEnabled', value)
+                    self.setWantedStateOfProperty('climatisation', 'settings', 'windowHeatingEnabled', value=value)
                 elif settingName=='targetTemperatureInCelsius' or settingName=='targetTemperatureInFahrenheit':
-                    self.setWantedStateOfProperty('climatisation', 'settings', 'climatisation_target_temperature', value)
+                    self.setWantedStateOfProperty('climatisation', 'settings', 'climatisation_target_temperature', value=value)
 
             return await self._set_climater(mode, data)
         else:
@@ -1231,17 +1231,17 @@ class Vehicle:
                 }
                 # set the wanted state of the property affected by the request (for settings it's done in set_climatisation_one_setting())
                 if mode == 'start':
-                    self.setWantedStateOfProperty('climatisation', 'electric_climatisation', True)
+                    self.setWantedStateOfProperty('climatisation', 'electric_climatisation', value=True)
                 elif mode == 'stop':
-                    self.setWantedStateOfProperty('climatisation', 'electric_climatisation', False)
+                    self.setWantedStateOfProperty('climatisation', 'electric_climatisation', value=False)
                 elif mode == 'auxiliary_start':
-                    self.setWantedStateOfProperty('climatisation', 'auxiliary_climatisation', True)
+                    self.setWantedStateOfProperty('climatisation', 'auxiliary_climatisation', value=True)
                 elif mode == 'auxiliary_stop':
-                    self.setWantedStateOfProperty('climatisation', 'auxiliary_climatisation', False)
+                    self.setWantedStateOfProperty('climatisation', 'auxiliary_climatisation', value=False)
                 elif mode == 'windowHeater start':
-                    self.setWantedStateOfProperty('climatisation', 'window_heater', True)
+                    self.setWantedStateOfProperty('climatisation', 'window_heater', value=True)
                 elif mode == 'windowHeater stop':
-                    self.setWantedStateOfProperty('climatisation', 'window_heater', False)
+                    self.setWantedStateOfProperty('climatisation', 'window_heater', value=False)
 
                 # if firebaseStatus is FIREBASE_STATUS_ACTIVATED, the request is assumed successful. Waiting for push notification before rereading status
                 if self.firebaseStatus == FIREBASE_STATUS_ACTIVATED:
@@ -3659,12 +3659,10 @@ class Vehicle:
     @property
     def is_area_alarm_supported(self) -> bool:
         """Return True, if vehicle supports area alarm (always True at the moment)"""
-        # Always True at the moment. Have to check, if the geofence capability is a necessary condition
-        return True
-        #if self._relevantCapabilties.get('geofence', {}).get('active', False):
-        #    return True
-        #else:
-        #    return False
+        if self._relevantCapabilties.get('geofence', {}).get('active', False):
+            return True
+        else:
+            return False
 
     #  Status of set data requests
     @property
