@@ -1137,32 +1137,35 @@ class Connection:
         """Get short term and cyclic trip statistics."""
         await self.set_token(self._session_auth_brand)
         if self._session_tripStatisticsStartDate==None:
-            # If connection was not initialised with parameter tripStatisticsStartDate, then 360 day is used for the CYCLIC trips and 90 days for the SHORT trips
+            # If connection was not initialised with parameter tripStatisticsStartDate, then 330 day is used for the CYCLIC trips and 25 days for the SHORT trips
             # (This keeps the statistics shorter in Home Assistant)
-            startDate = (datetime.now() - timedelta(days= 360)).strftime('%Y-%m-%d')
+            startDate = (datetime.now() - timedelta(days= 330)).strftime('%Y-%m-01') # startDate should be the first day of a month when data granularity level is month 
         else:
             startDate = self._session_tripStatisticsStartDate
         try:
             data: dict[str, dict] ={'tripstatistics': {}} 
+            endDateTime = datetime.now().strftime('%Y-%m-%dT23:59:59Z')
             if supportsCyclicTrips:
-                dataType='CYCLIC'
-                response = await self.get(API_TRIP.format(baseurl=baseurl, vin=vin, dataType=dataType, startDate=startDate))
-                if response.get('data', []):
-                    data['tripstatistics']['cyclic']= response.get('data', [])
+                #dataType='CYCLIC'
+                #response = await self.get(API_TRIP.format(baseurl=baseurl, vin=vin, dataType=dataType, startDate=startDate))
+                response = await self.get(API_TRIP.format(baseurl=baseurl, vin=vin, startDate=startDate, endDateTime= endDateTime))
+                if response.get('data',{}).get('dailySummary', []):
+                    data['tripstatistics']['cyclic']= response.get('data',{}).get('dailySummary', [])
                 elif response.get('status_code', {}):
                     self._LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
                 else:
                     self._LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
             else:
                 self._LOGGER.info(f'Vehicle does not support cyclic trips.')
-            dataType='SHORT'
+            #dataType='SHORT'
             if self._session_tripStatisticsStartDate==None:
-                # If connection was not initialised with parameter tripStatisticsStartDate, then 360 day is used for the CYCLIC trips and 90 days for the SHORT trips
+                # If connection was not initialised with parameter tripStatisticsStartDate, then 330 day is used for the CYCLIC trips and 25 days for the SHORT trips
                 # (This keeps the statistics shorter in Home Assistant)
-                startDate = (datetime.now() - timedelta(days= 90)).strftime('%Y-%m-%d')
-            response = await self.get(API_TRIP.format(baseurl=baseurl, vin=vin, dataType=dataType, startDate=startDate))
-            if response.get('data', []):
-                data['tripstatistics']['short']= response.get('data', [])
+                startDate = (datetime.now() - timedelta(days= 25)).strftime('%Y-%m-%d')
+            #response = await self.get(API_TRIP.format(baseurl=baseurl, vin=vin, dataType=dataType, startDate=startDate))
+            response = await self.get(API_TRIP.format(baseurl=baseurl, vin=vin, startDate=startDate, endDateTime= endDateTime))
+            if response.get('data',{}).get('dailySummary', []):
+                data['tripstatistics']['short']= response.get('data',{}).get('dailySummary', [])
             elif response.get('status_code', {}):
                 self._LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
             else:

@@ -65,6 +65,16 @@ class Instrument:
 
     @property
     def attributes(self):
+        if self.name.startswith('Last trip'):
+            if self.vehicle.trip_last_entry.get('date', None)!=None:
+                attrs = {}
+                attrs['date'] = self.vehicle.trip_last_entry.get('date', None)
+                return attrs
+        if self.name.startswith('Last cycle'):
+            if self.vehicle.trip_last_cycle_entry.get('date', None)!=None:
+                attrs = {}
+                attrs['date'] = self.vehicle.trip_last_cycle_entry.get('date', None)
+                return attrs
         return {}
 
     @property

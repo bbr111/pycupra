@@ -22,10 +22,10 @@ CLIENT_LIST = {
 
 
 XCLIENT_ID = '3c756d46-f1ba-4d78-9f9a-cff0d5292d51@apps_vw-dilab.com' 
-XAPPVERSION = '2.5.0'
+XAPPVERSION = '2.10.0'
 XAPPNAME = 'com.cupra.mycupra'
-USER_AGENT_CUPRA = 'OLACupra/2.5.0 (Android 12; sdk_gphone64_x86_64; Google) Mobile' 
-USER_AGENT_SEAT = 'OLASeat/2.5.0 (Android 12; sdk_gphone64_x86_64; Google) Mobile'
+USER_AGENT_CUPRA = 'OLACupra/2.10.0 (Android 12; sdk_gphone64_x86_64; Google) Mobile' 
+USER_AGENT_SEAT = 'OLASeat/2.10.1 (Android 12; sdk_gphone64_x86_64; Google) Mobile'
 APP_URI = 'https://ola.prod.code.seat.cloud.vwgroup.com'
 
 HEADERS_SESSION = {
@@ -37,8 +37,9 @@ HEADERS_SESSION = {
     #'X-Client-Id': XCLIENT_ID,
     #'X-App-Version': XAPPVERSION,
     #'X-App-Name': XAPPNAME,
-    'User-Agent': USER_AGENT_SEAT
+    'User-Agent': USER_AGENT_SEAT,
     #'User-ID': '?????', # to be set later
+    'Accept-Language': 'en_GB',
     },
     'cupra': {
     'Connection': 'keep-alive',
@@ -46,10 +47,11 @@ HEADERS_SESSION = {
     'Accept-charset': 'UTF-8',
     'Accept': 'application/json',
     #'X-Client-Id': XCLIENT_ID,
-    #'X-App-Version': XAPPVERSION,
     #'X-App-Name': XAPPNAME,
-    'User-Agent': USER_AGENT_CUPRA
-    #'User-ID': '?????', # to be set later
+    'User-Agent': USER_AGENT_CUPRA,
+    #'User-ID': '?????', # to be set later,
+    #'Accept-Encoding': 'gzip', # to be deleted later!!!
+    'Accept-Language': 'en_GB',
     }
 }
 
@@ -140,7 +142,7 @@ API_DEPARTURE_TIMERS = '{baseurl}/v1/vehicles/{vin}/departure-timers'           
 API_DEPARTURE_PROFILES = '{baseurl}/v1/vehicles/{vin}/departure/profiles'                             # Departure profiles
 API_POSITION = '{baseurl}/v1/vehicles/{vin}/parkingposition'                                         # Position data
 API_POS_TO_ADDRESS= 'https://maps.googleapis.com/maps/api/directions/json?origin={lat},{lon}&destination={lat},{lon}&traffic_model=best_guess&departure_time=now&language=de&key={apiKeyForGoogle}&mode=driving'
-API_TRIP = '{baseurl}/v1/vehicles/{vin}/driving-data/{dataType}?from={startDate}T00:00:00Z&to=2099-12-31T09:59:01Z' # Trip statistics (whole history) SHORT/LONG/CYCLIC (WEEK only with from)
+API_TRIP = '{baseurl}/v2/vehicles/{vin}/driving-data/CUSTOM?from={startDate}T00:00:00Z&to={endDateTime}&distanceUnit=km&speedUnit=kmph' # Trip statistics (whole history) SHORT/LONG/CYCLIC (WEEK only with from)
 API_MILEAGE = '{baseurl}/v1/vehicles/{vin}/mileage'                                                  # Total km etc
 API_MAINTENANCE = '{baseurl}/v1/vehicles/{vin}/maintenance'                                          # Inspection information
 API_MEASUREMENTS = '{baseurl}/v1/vehicles/{vin}/measurements/engines'                                # ???

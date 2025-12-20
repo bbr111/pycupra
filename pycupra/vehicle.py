@@ -3381,40 +3381,63 @@ class Vehicle:
     # Trip data
     @property
     def trip_last_entry(self):
-        return self.attrs.get('tripstatistics', {}).get('short', [{},{}])[-1]
+        #return self.attrs.get('tripstatistics', {}).get('short', [{},{}])[-1]
+        try:
+            index = len(self.attrs.get('tripstatistics', {}).get('short', [{},{}]))
+            while index > 0:
+                index=index-1
+                element = self.attrs.get('tripstatistics', {}).get('short', [{},{}])[index]
+                if len(element.get('values',[]))>4:
+                    lastEntry={}
+                    notEmpty = False
+                    lastEntry['date']=element.get('day',{}).get('displayDate','')
+                    for subElement in element.get('values',[]):
+                        if subElement['value'] != None: 
+                            lastEntry[subElement['id']]=subElement['value']
+                        else:
+                            lastEntry[subElement['id']]=subElement['total']
+                        if subElement.get('id','')=='drivingTime' and lastEntry[subElement['id']]!=0:
+                            notEmpty = True
+                    if notEmpty:
+                        return lastEntry
+            return {}
+        except Exception as error:
+            self._LOGGER.warning(f'Failed to find trip_last_entry - {error}')
+        #raise SeatException('Failed to find trip_last_entry')
+        return {}
 
     @property
     def trip_last_average_speed(self):
-        return self.trip_last_entry.get('averageSpeedKmph')
+        return self.trip_last_entry.get('speed')
 
     @property
     def is_trip_last_average_speed_supported(self) -> bool:
         response = self.trip_last_entry
-        if response and type(response.get('averageSpeedKmph', None)) in (float, int):
+        if response and type(response.get('speed', None)) in (float, int):
             return True
         else:
             return False
 
     @property
     def trip_last_average_electric_consumption(self):
-        return self.trip_last_entry.get('averageElectricConsumption')
+        return self.trip_last_entry.get('electricConsumption')
 
     @property
     def is_trip_last_average_electric_consumption_supported(self) -> bool:
         response = self.trip_last_entry
-        if response and type(response.get('averageElectricConsumption', None)) in (float, int):
+        if response and type(response.get('electricConsumption', None)) in (float, int):
             return True
         else:
             return False
 
     @property
     def trip_last_average_fuel_consumption(self):
-        return self.trip_last_entry.get('averageFuelConsumption')
+        return self.trip_last_entry.get('fuelConsumption')
 
     @property
     def is_trip_last_average_fuel_consumption_supported(self) -> bool:
         response = self.trip_last_entry
-        if response and type(response.get('averageFuelConsumption', None)) in (float, int):
+        if response and type(response.get('fuelConsumption', None)) in (float, int):
             return True
         else:
             return False
@@ -3446,24 +3469,24 @@ class Vehicle:
 
     @property
     def trip_last_duration(self):
-        return self.trip_last_entry.get('travelTime')
+        return self.trip_last_entry.get('drivingTime')
 
     @property
     def is_trip_last_duration_supported(self) -> bool:
         response = self.trip_last_entry
-        if response and type(response.get('travelTime', None)) in (float, int):
+        if response and type(response.get('drivingTime', None)) in (float, int):
             return True
         else:
             return False
 
     @property
     def trip_last_length(self):
-        return self.trip_last_entry.get('mileageKm')
+        return self.trip_last_entry.get('distanceDriven')
 
     @property
     def is_trip_last_length_supported(self) -> bool:
         response = self.trip_last_entry
-        if response and type(response.get('mileageKm', None)) in (float, int):
+        if response and type(response.get('distanceDriven', None)) in (float, int):
             return True
         else:
             return False
@@ -3513,40 +3536,63 @@ class Vehicle:
 
     @property
     def trip_last_cycle_entry(self):
-        return self.attrs.get('tripstatistics', {}).get('cyclic', [{},{}])[-1]
+        #return self.attrs.get('tripstatistics', {}).get('cyclic', [{},{}])[-1]
+        try:
+            index = len(self.attrs.get('tripstatistics', {}).get('cyclic', [{},{}]))
+            while index > 0:
+                index=index-1
+                element = self.attrs.get('tripstatistics', {}).get('cyclic', [{},{}])[index]
+                if len(element.get('values',[]))>4:
+                    lastEntry={}
+                    notEmpty = False
+                    lastEntry['date']=element.get('day',{}).get('displayDate','')
+                    for subElement in element.get('values',[]):
+                        if subElement['value'] != None: 
+                            lastEntry[subElement['id']]=subElement['value']
+                        else:
+                            lastEntry[subElement['id']]=subElement['total']
+                        if subElement.get('id','')=='drivingTime' and lastEntry[subElement['id']]!=0:
+                            notEmpty = True
+                    if notEmpty:
+                        return lastEntry
+            return {}
+        except Exception as error:
+            self._LOGGER.warning(f'Failed to find trip_last_cycle_entry - {error}')
+        #raise SeatException('Failed to find trip_last_cycle_entry')
+        return {}
 
     @property
     def trip_last_cycle_average_speed(self):
-        return self.trip_last_cycle_entry.get('averageSpeedKmph')
+        return self.trip_last_cycle_entry.get('speed')
 
     @property
     def is_trip_last_cycle_average_speed_supported(self) -> bool:
         response = self.trip_last_cycle_entry
-        if response and type(response.get('averageSpeedKmph', None)) in (float, int):
+        if response and type(response.get('speed', None)) in (float, int):
             return True
         else:
             return False
 
     @property
     def trip_last_cycle_average_electric_consumption(self):
-        return self.trip_last_cycle_entry.get('averageElectricConsumption')
+        return self.trip_last_cycle_entry.get('electricConsumption')
 
     @property
     def is_trip_last_cycle_average_electric_consumption_supported(self) -> bool:
         response = self.trip_last_cycle_entry
-        if response and type(response.get('averageElectricConsumption', None)) in (float, int):
+        if response and type(response.get('electricConsumption', None)) in (float, int):
             return True
         else:
             return False
 
     @property
     def trip_last_cycle_average_fuel_consumption(self):
-        return self.trip_last_cycle_entry.get('averageFuelConsumption')
+        return self.trip_last_cycle_entry.get('fuelConsumption')
 
     @property
     def is_trip_last_cycle_average_fuel_consumption_supported(self) -> bool:
         response = self.trip_last_cycle_entry
-        if response and type(response.get('averageFuelConsumption', None)) in (float, int):
+        if response and type(response.get('fuelConsumption', None)) in (float, int):
             return True
         else:
             return False
@@ -3578,24 +3624,24 @@ class Vehicle:
 
     @property
     def trip_last_cycle_duration(self):
-        return self.trip_last_cycle_entry.get('travelTime')
+        return self.trip_last_cycle_entry.get('drivingTime')
 
     @property
     def is_trip_last_cycle_duration_supported(self) -> bool:
         response = self.trip_last_cycle_entry
-        if response and type(response.get('travelTime', None)) in (float, int):
+        if response and type(response.get('drivingTime', None)) in (float, int):
             return True
         else:
             return False
 
     @property
     def trip_last_cycle_length(self) -> int:
-        return self.trip_last_cycle_entry.get('mileageKm')
+        return self.trip_last_cycle_entry.get('distanceDriven')
 
     @property
     def is_trip_last_cycle_length_supported(self) -> bool:
         response = self.trip_last_cycle_entry
-        if response and type(response.get('mileageKm', None)) in (float, int):
+        if response and type(response.get('distanceDriven', None)) in (float, int):
             return True
         else:
             return False
