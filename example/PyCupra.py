@@ -162,7 +162,7 @@ def readCredentialsFile():
         _LOGGER.info('readCredentialsFile not successful. Perhaps no credentials file present.')
         return None
 
-def exportToCSV(vehicle, csvFileName, dataType='short'):
+def exportToCSV(vehicle, csvFileName, dataType='dailySums'):
     if len(vehicle.attrs.get('tripstatistics', {}).get(dataType, []))< 1:
         _LOGGER.warning(f'No trips statistics of type {dataType}')
         return False
@@ -493,7 +493,7 @@ async def main():
         print('######################################################')
         print(f"Initiating new session to Cupra/Seat Cloud with {credentials.get('username')} as username")
         #connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False, anonymise=True, tripStatisticsStartDate='1970-01-01', logPrefix='1')
-        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False, anonymise=True, logPrefix='1')
+        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False, anonymise=True)
         print("Attempting to login to the Seat Cloud service")
         print(datetime.now())
         if await connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH, apiKey=credentials.get('apiKey',None)):
@@ -639,10 +639,13 @@ async def main():
             print(f"Sleeping for {INTERVAL} seconds")
             await asyncio.sleep(INTERVAL)"""
             
+            # Test, if old API endpoint for driving data is available again:
+            await connection.getTripStatisticsV1(vehicle.vin, 'https://ola.prod.code.seat.cloud.vwgroup.com')
+
             print('########################################')
             print('#     Export driving data to csv       #')
             print(txt.center(40, '#'))
-            exportToCSV(vehicle, credentials.get('csvFileName','./drivingData.csv'), 'short') # possible value: short/cyclic
+            exportToCSV(vehicle, credentials.get('csvFileName','./drivingData.csv'), 'dailySums') # possible value: 'dailySums' and 'monthlySums'
             print('')
             print('Export of driving data to csv complete')
 
@@ -708,7 +711,7 @@ async def main():
                     i=i+1
                     _LOGGER.debug(f'Round {i}')
 
-    sys.exit(1)
+    #sys.exit(1)
 
 if __name__ == "__main__":
     loop = asyncio.new_event_loop()

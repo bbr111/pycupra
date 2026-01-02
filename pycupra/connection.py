@@ -78,6 +78,7 @@ from .const import (
     API_POSITION,
     API_POS_TO_ADDRESS,
     API_TRIP,
+    API_TRIP_V1,
     API_CLIMATER_STATUS,
     API_CLIMATER,
     API_CLIMATISATION_TIMERS,
@@ -306,6 +307,7 @@ class Connection:
                 self._LOGGER.debug(f'Get request to {AUTH_OIDCONFIG} was not successful. Response: {req}')
                 return False
             response_data =  await req.json()
+            self._LOGGER.debug(f'Get request to {AUTH_OIDCONFIG} was not successful. Response data: {response_data}')
             authorizationEndpoint = response_data['authorization_endpoint']
             authissuer = response_data['issuer']
             oauthClient = OAuth2Session(client_id=CLIENT_LIST[client].get('CLIENT_ID'), scope=CLIENT_LIST[client].get('SCOPE'), redirect_uri=CLIENT_LIST[client].get('REDIRECT_URL'))
@@ -1133,6 +1135,26 @@ class Connection:
             return False
         return data
 
+    async def getTripStatisticsV1(self, vin, baseurl) -> dict | bool:
+        """Get short term trip statistics, if V1 works."""
+        await self.set_token(self._session_auth_brand)
+        try:
+            data: dict[str, dict] ={'tripstatistics': {}} 
+            dataType='SHORT'
+            response = await self.get(API_TRIP_V1.format(baseurl=baseurl, vin=vin, dataType=dataType))
+            if response.get('data',{}):
+                self._LOGGER.info('The old trip statistics endpoint is online!!!')
+                data['tripstatistics']['oldshort']= response.get('data',{})
+            elif response.get('status_code', {}):
+                self._LOGGER.warning(f'Could not fetch trip statistics, HTTP status code: {response.get("status_code")}')
+            else:
+                self._LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
+            if data.get('tripstatistics',{}) != {}:
+                return data
+        except Exception as error:
+            self._LOGGER.warning(f'Could not fetch trip statistics from v1 endpoint, error: {error}')
+        return False
+
     async def getTripStatistics(self, vin, baseurl, supportsCyclicTrips) -> dict | bool:
         """Get short term and cyclic trip statistics."""
         await self.set_token(self._session_auth_brand)
@@ -1171,6 +1193,8 @@ class Connection:
             else:
                 self._LOGGER.info(f'Unhandled error while trying to fetch trip statistics')
             if data.get('tripstatistics',{}) != {}:
+                data['tripstatistics']['dailySums'] = convertTripStatisticsData(data.get('tripstatistics',{}).get('short',{}))
+                data['tripstatistics']['monthlySums'] = convertTripStatisticsData(data.get('tripstatistics',{}).get('cyclic',{}))
                 return data
         except Exception as error:
             self._LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
@@ -1918,6 +1942,19 @@ class Connection:
                 for i in range(len(inObj)):
                     inObj[i]= self.anonymise(inObj[i])
         return inObj
+
+def convertTripStatisticsData(dataFromAPI) -> dict:
+    data = []
+    for element in dataFromAPI:
+        newEntry = {}
+        newEntry['date']=element.get('day',{}).get('id',datetime(year=1970, month=1, day= 1)).strftime('%Y-%m-%d')
+        for subElement in element.get('values',[]):
+            if subElement['value'] != None: 
+                newEntry[subElement['id']]=subElement['value']
+            else:
+                newEntry[subElement['id']]=subElement['total']
+        data.append(newEntry)
+    return data
 
 #async def main():
     """Main method."""

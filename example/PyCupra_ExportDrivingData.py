@@ -39,7 +39,7 @@ def readCredentialsFile():
         _LOGGER.info('readCredentialsFile not successful. Perhaps no credentials file present.')
         return None
 
-def exportToCSV(vehicle, csvFileName, dataType='short'):
+def exportToCSV(vehicle, csvFileName, dataType='dailySums'):
     df= pd.DataFrame(vehicle._states['tripstatistics'][dataType])
     _LOGGER.debug('Exporting trip data to csv')
     df.to_csv(csvFileName)
@@ -67,7 +67,7 @@ async def main():
         print('# Logging on to ola.prod.code.seat.cloud.vwgroup.com #')
         print('######################################################')
         print(f"Initiating new session to Cupra/Seat Cloud with {credentials.get('username')} as username")
-        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False, anonymise=True, tripStatisticsStartDate='1970-01-01')
+        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False, anonymise=True)
         print("Attempting to login to the Seat Cloud service")
         if await connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH, apiKey=credentials.get('apiKey',None)):
             print('Login or token refresh success!')
@@ -101,10 +101,10 @@ async def main():
             print('########################################')
             print('#     Export driving data to csv       #')
             print(txt.center(40, '#'))
-            exportToCSV(vehicle, credentials.get('csvFileName','./drivingData.csv'), 'short') # possible value: short/cyclic
+            exportToCSV(vehicle, credentials.get('csvFileName','./drivingData.csv'), 'dailySums') # possible 'dailySums' and 'monthlySums'
             print('')
             print('Export of driving data to csv complete')
-    sys.exit(1)
+    #sys.exit(1)
 
 if __name__ == "__main__":
     loop = asyncio.new_event_loop()

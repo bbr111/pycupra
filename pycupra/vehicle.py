@@ -1259,7 +1259,7 @@ class Vehicle:
                     elif mode == 'stop':
                         if not self.electric_climatisation:
                             actionSuccessful = True
-                    if mode == 'auxiliary_start':
+                    elif mode == 'auxiliary_start':
                         if self.auxiliary_climatisation:
                             actionSuccessful = True
                     elif mode == 'auxiliary_stop':
