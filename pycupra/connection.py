@@ -1943,7 +1943,7 @@ class Connection:
                     inObj[i]= self.anonymise(inObj[i])
         return inObj
 
-def convertTripStatisticsData(dataFromAPI) -> dict:
+def convertTripStatisticsData(dataFromAPI) -> list:
     data = []
     for element in dataFromAPI:
         newEntry = {}
