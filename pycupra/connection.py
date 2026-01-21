@@ -47,7 +47,6 @@ from .exceptions import (
 
 from requests_oauthlib import OAuth2Session
 from oauthlib.oauth2.rfc6749.parameters import parse_authorization_code_response, parse_token_response, prepare_grant_uri
-import cryptography
 
 from aiohttp import ClientSession, ClientTimeout
 from aiohttp.hdrs import METH_GET, METH_POST, METH_PUT, METH_DELETE
