@@ -23,6 +23,5 @@ dependencies = [
     "pillow",
     "protobuf",
     "http-ece",
-    "requests-oauthlib",
-    "csv"
+    "requests-oauthlib"
 ]
