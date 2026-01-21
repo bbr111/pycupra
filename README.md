@@ -10,8 +10,6 @@ https://github.com/robinostlund/volkswagencarnet
 
 Retrieve statistics about your Cupra/Seat from the Cupra/Seat Connect online service
 
-No licence, public domain, no guarantees, feel free to use for anything. Please contribute improvements/bugfixes etc.
-
 ## Breaking changes
 
 - The method vehicle.update(updateType) supports 3 different update types: 

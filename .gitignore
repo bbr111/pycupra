@@ -3,8 +3,10 @@
 *.egg-info/
 build/
 dist/
+pycupra_data/
 __pycache__/
 *.json
 *.txt
 *.log
 *.png
+*.csv

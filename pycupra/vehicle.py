@@ -2259,7 +2259,7 @@ class Vehicle:
         return self.is_charging_supported
 
     @property
-    def charging_power(self) -> int:
+    def charging_power(self) -> float:
         """Return charging power in watts."""
         if self.attrs.get('charging', False):
             return self.attrs.get('charging', {}).get('status', {}).get('charging', {}).get('chargedPowerInKw', 0.0)
@@ -3542,7 +3542,7 @@ class Vehicle:
             while index > 0:
                 index=index-1
                 element = self.attrs.get('tripstatistics', {}).get('cyclic', [{},{}])[index]
-                if len(element.get('values',[]))>4:
+                if len(element.get('values',[]))>3:
                     lastEntry={}
                     notEmpty = False
                     lastEntry['date']=element.get('day',{}).get('displayDate','')

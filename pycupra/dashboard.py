@@ -94,34 +94,7 @@ class Sensor(Instrument):
         self.convert = False
 
     def configurate(self, **config) -> None:
-        if self.unit and config.get('miles', False) is True:
-            if "km" == self.unit:
-                self.unit = "mi"
-                self.convert = True
-            elif "km/h" == self.unit:
-                self.unit = "mi/h"
-                self.convert = True
-            elif "l/100km" == self.unit:
-                self.unit = "l/100 mi"
-                self.convert = True
-            elif "kWh/100km" == self.unit:
-                self.unit = "kWh/100 mi"
-                self.convert = True
-        elif self.unit and config.get('scandinavian_miles', False) is True:
-            if "km" == self.unit:
-                self.unit = "mil"
-            elif "km/h" == self.unit:
-                self.unit = "mil/h"
-            elif "l/100km" == self.unit:
-                self.unit = "l/100 mil"
-            elif "kWh/100km" == self.unit:
-                self.unit = "kWh/100 mil"
-
-        # Init placeholder for parking heater duration
-        config.get('parkingheater', 30)
-        if "pheater_duration" == self.attr:
-            setValue = config.get('climatisation_duration', 30)
-            self.vehicle.pheater_duration = setValue
+        pass
 
     @property
     def is_mutable(self) -> bool:
@@ -137,22 +110,7 @@ class Sensor(Instrument):
     @property
     def state(self):
         val = super().state
-        # Convert to miles
-        if val and self.unit and "mi" in self.unit and self.convert is True:
-            return int(round(val / 1.609344))
-        elif val and self.unit and "mi/h" in self.unit and self.convert is True:
-            return int(round(val / 1.609344))
-        elif val and self.unit and "gal/100 mi" in self.unit and self.convert is True:
-            return round(val * 0.4251438, 1)
-        elif val and self.unit and "kWh/100 mi" in self.unit and self.convert is True:
-            return round(val * 0.4251438, 1)
-        elif val and self.unit and "°F" in self.unit and self.convert is True:
-            temp = round((val * 9 / 5) + 32, 1)
-            return temp
-        elif val and self.unit in ['mil', 'mil/h']:
-            return val / 10
-        else:
-            return val
+        return val
 
 
 class BinarySensor(Instrument):
@@ -1233,7 +1191,10 @@ class DepartureTimer1(Switch):
 
     @property
     def attributes(self):
-        return dict(self.vehicle.departure1)
+        if self.vehicle.departure1 != None:
+            return dict(self.vehicle.departure1)
+        else:
+            return {}
 
 
 class DepartureTimer2(Switch):
@@ -1263,7 +1224,10 @@ class DepartureTimer2(Switch):
 
     @property
     def attributes(self):
-        return dict(self.vehicle.departure2)
+        if self.vehicle.departure2 != None:
+            return dict(self.vehicle.departure2)
+        else:
+            return {}
 
 class DepartureTimer3(Switch):
     def __init__(self):
@@ -1292,7 +1256,10 @@ class DepartureTimer3(Switch):
 
     @property
     def attributes(self):
-        return dict(self.vehicle.departure3)
+        if self.vehicle.departure3 != None:
+            return dict(self.vehicle.departure3)
+        else:
+            return {}
 
 class DepartureProfile1(Switch):
     def __init__(self):
@@ -1813,13 +1780,13 @@ def create_instruments():
             unit="minutes",
             device_class="duration"
         ),
-        Sensor(
-            attr="outside_temperature",
-            name="Outside temperature",
-            icon="mdi:thermometer",
-            unit="°C",
-            device_class="temperature"
-        ),
+        #Sensor(
+        #    attr="outside_temperature",
+        #    name="Outside temperature",
+        #    icon="mdi:thermometer",
+        #    unit="°C",
+        #    device_class="temperature"
+        #),
         Sensor(
             attr="requests_remaining",
             name="Requests remaining",

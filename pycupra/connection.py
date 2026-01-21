@@ -17,6 +17,7 @@ import xmltodict
 from copy import deepcopy
 import importlib.metadata
 from typing import Any
+import csv
 
 from PIL import Image
 from io import BytesIO
@@ -46,6 +47,7 @@ from .exceptions import (
 
 from requests_oauthlib import OAuth2Session
 from oauthlib.oauth2.rfc6749.parameters import parse_authorization_code_response, parse_token_response, prepare_grant_uri
+import cryptography
 
 from aiohttp import ClientSession, ClientTimeout
 from aiohttp.hdrs import METH_GET, METH_POST, METH_PUT, METH_DELETE
@@ -105,6 +107,8 @@ from .const import (
 
     PUBLIC_MODEL_IMAGES_SERVER,
     FIREBASE_STATUS_NOT_INITIALISED,
+    SUMTYPE_DAILY,
+    SUMTYPE_MONTHLY,
 )
 
 version_info >= (3, 0) or exit('Python 3 required')
@@ -118,7 +122,7 @@ loginInProgress = False
 class Connection:
     """ Connection to Connect services """
   # Init connection class
-    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, nightlyUpdateReduction=False, anonymise=True, tripStatisticsStartDate=None, logPrefix=None, **optional):
+    def __init__(self, session, brand='cupra', username='', password='', fulldebug=False, nightlyUpdateReduction=False, anonymise=True, tripStatisticsStartDate=None, logPrefix=None, hass=None, **optional):
         """ Initialize """
         self._logPrefix = logPrefix
         if self._logPrefix!= None:
@@ -146,10 +150,13 @@ class Connection:
         self._session_auth_brand = brand
         self._session_auth_username = username
         self._session_auth_password = password
+        self._hass = hass
         self._session_tokens = {}
 
         self._vehicles = []
         self._userData = {}
+        self.dailyTripData: dict = {}
+        self.monthlyTripData: dict = {}
 
         self._LOGGER.info(f'Init PyCupra library, version {lib_version}')
         self._LOGGER.debug(f'Using service {self._session_base}')
@@ -169,6 +176,16 @@ class Connection:
         self.addToAnonymisationKeys('vin')
         self._error401 = False
 
+        try:
+            if self._hass:
+                self._dataBasePath = self._hass.config.path("pycupra_data")
+            else:
+                self._dataBasePath = os.path.join(".", "pycupra_data")
+            if not os.path.exists(self._dataBasePath):
+                self._LOGGER.error(f'Directory {self._dataBasePath} does not exist. This should only happen once. Creating it.')
+                os.mkdir(self._dataBasePath)
+        except Exception as error:
+            raise SeatException(f'Error while checking for data folders and creating them if bot already present. Error: {error}')
 
     def _clear_cookies(self):
         self._session._cookie_jar._cookies.clear()
@@ -230,7 +247,7 @@ class Connection:
     def writeImageFile(self, imageName, imageData, imageDict, vin):
         try:
             # Target directory in HA container (/config/www)
-            if hasattr(self, '_hass'):
+            if self._hass:
                 base_path = self._hass.config.path("www")
             else:
                 base_path = os.path.join(".", "www")
@@ -928,15 +945,22 @@ class Connection:
                     if self.vehicle(vin) is not None:
                         self._LOGGER.debug(self.anonymise(f'Vehicle with VIN number {vin} already exist.'))
                         car = Vehicle(self, newVehicle)
-                        if not car == self.vehicle(newVehicle):
+                        if not car == self.vehicle(vin):
                             self._LOGGER.debug(self.anonymise(f'Updating {newVehicle} object'))
-                            self._vehicles.pop(newVehicle)
+                            self._vehicles.remove(self.vehicle(vin))
                             self._vehicles.append(Vehicle(self, newVehicle))
                     else:
                         self._LOGGER.debug(self.anonymise(f'Adding vehicle {vin}, with connectivities: {vehicle.get('connectivities')}'))
                         self._vehicles.append(Vehicle(self, newVehicle))
             except:
                 raise SeatLoginFailedException("Unable to fetch associated vehicles for account")
+        loop = asyncio.get_running_loop()
+        if not await loop.run_in_executor(None, self.readSumTripStatisticsFile, SUMTYPE_DAILY):
+            self._LOGGER.warning(f'readSumTripStatisticsFile() was not successful for {SUMTYPE_DAILY} sum data')
+        loop = asyncio.get_running_loop()
+        if not await loop.run_in_executor(None, self.readSumTripStatisticsFile, SUMTYPE_MONTHLY):
+            self._LOGGER.warning(f'readSumTripStatisticsFile() was not successful for {SUMTYPE_MONTHLY} sum data')
+
         # Update data for all vehicles
         await self.update_all()
 
@@ -1195,6 +1219,12 @@ class Connection:
             if data.get('tripstatistics',{}) != {}:
                 data['tripstatistics']['dailySums'] = convertTripStatisticsData(data.get('tripstatistics',{}).get('short',{}))
                 data['tripstatistics']['monthlySums'] = convertTripStatisticsData(data.get('tripstatistics',{}).get('cyclic',{}))
+                if self.updateDailySumTripStatistics(data, vin):
+                    loop = asyncio.get_running_loop()
+                    await loop.run_in_executor(None, self.writeSumTripStatisticsFile, SUMTYPE_DAILY)
+                if self.updateMonthlySumTripStatistics(data, vin):
+                    loop = asyncio.get_running_loop()
+                    await loop.run_in_executor(None, self.writeSumTripStatisticsFile, SUMTYPE_MONTHLY)
                 return data
         except Exception as error:
             self._LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
@@ -1897,6 +1927,198 @@ class Connection:
             except:
                 raise SeatException(f'Failed to set token for "{client}"')
             return True
+
+    def readSumTripStatisticsFile(self, sumType: str) -> bool:
+        try:
+            self._LOGGER.debug(f"Reading {sumType} sum trip statistics files if present.")
+            for vehicle in self.vehicles:
+                csvFileName = os.path.join(self._dataBasePath, f"{vehicle.vin}_drivingData_{sumType}Sums.csv")
+                if not os.path.exists(csvFileName):
+                    self._LOGGER.warning(self.anonymise(f"Could not find {sumType} sum trip statistics file {csvFileName}. So starting without {sumType} sum trip statistics history."))
+                else:
+                    with open(csvFileName, newline='') as csvfile:
+                        reader = csv.DictReader(csvfile)
+                        for row in reader:
+                            data: dict[str, Any] = {}
+                            data['date']=row.get('date','2000-01-01')
+                            data['startMileage']=int(row.get('startMileage','0'))
+                            data['endMileage']=int(row.get('endMileage','0'))
+                            data['fuelConsumption']=float(row.get('fuelConsumption','0.0'))
+                            data['electricConsumption']=float(row.get('electricConsumption','0.0'))
+                            data['drivingTime']=float(row.get('drivingTime','0.0'))
+                            data['distanceDriven']=float(row.get('distanceDriven','0.0'))
+                            data['speed']=float(row.get('speed','0.0'))
+                            data['comment']=row.get('comment','')
+                            if sumType == SUMTYPE_MONTHLY:
+                                if self.monthlyTripData.get(vehicle.vin,None)==None:
+                                    self.monthlyTripData[vehicle.vin]={}
+                                self.monthlyTripData[vehicle.vin][(data.get('date','2000-01-01'))] = data
+                            else:
+                                if self.dailyTripData.get(vehicle.vin,None)==None:
+                                    self.dailyTripData[vehicle.vin]={}
+                                self.dailyTripData[vehicle.vin][(data.get('date','2000-01-01'))] = data
+                        csvfile.close()
+            return True
+        except Exception as error:
+            self._LOGGER.error(f"Error while reading {sumType} sum trip statistics file. Error: {error}.")
+            raise SeatException(f"Error while trying to read {sumType} sum trip statistics file")
+        return False
+
+    def writeSumTripStatisticsFile(self, sumType: str) -> bool:
+        try:
+            for vehicle in self.vehicles:
+                csvFileName = os.path.join(self._dataBasePath, f"{vehicle.vin}_drivingData_{sumType}Sums.csv")
+                if os.path.exists(csvFileName):
+                    os.replace(csvFileName, csvFileName+".old")
+
+                with open(csvFileName, 'w', newline='') as csvfile:
+                    fieldnames = ['rowNo','date', 'distanceDriven', 'startMileage', 'endMileage',  'drivingTime', 'fuelConsumption', 'electricConsumption', 'speed', 'comment']
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    writer.writeheader()
+                    rowCounter = 0
+                    if sumType == SUMTYPE_MONTHLY:
+                        vehiclesSumTripData = self.monthlyTripData.get(vehicle.vin,{})
+                    else:
+                        vehiclesSumTripData = self.dailyTripData.get(vehicle.vin,{})
+                    listOfDatesSorted = sorted(vehiclesSumTripData)
+
+                    for entryDate in listOfDatesSorted:
+                        if sumType == SUMTYPE_MONTHLY:
+                            trip = self.monthlyTripData.get(vehicle.vin,{}).get(entryDate,{})
+                        else:
+                            trip = self.dailyTripData.get(vehicle.vin,{}).get(entryDate,{})
+                        if trip=={}:
+                            self._LOGGER.warning(f'Did not find trip for date {entryDate}')
+                            return False
+                        writer.writerow({
+                            'rowNo': rowCounter,
+                            'date': trip.get('date',''),
+                            'distanceDriven': trip.get('distanceDriven',0.0),
+                            'startMileage': trip.get('startMileage',0),
+                            'endMileage': trip.get('endMileage',0),
+                            'drivingTime': trip.get('drivingTime',0.0),
+                            'fuelConsumption': trip.get('fuelConsumption',0.0),
+                            'electricConsumption': trip.get('electricConsumption',0.0),
+                            'speed': trip.get('speed',0.0),
+                            'comment': trip.get('comment',''),
+                            })
+                        rowCounter = rowCounter +1
+                    csvfile.close()
+            return True
+        except Exception as error:
+            self._LOGGER.error(f"Error while writing {sumType} sum trip statistics file. Error: {error}.")
+            raise SeatException(f"Error while trying to write {sumType} sum trip statistics to file")
+        return False
+
+    def updateDailySumTripStatistics(self, newTripData: dict,vin: str) -> bool:
+        self._LOGGER.debug(self.anonymise(f'Updating daily sum trip statistics for vehicle {vin}'))
+        listOfDailySums = newTripData.get('tripstatistics', {}).get('dailySums',[])
+        updated = False
+        vehicle = self.vehicle(vin)
+        latestMileage:int = 0
+        if vehicle.is_distance_supported:
+            latestMileage = vehicle.distance
+        backwardCalculatedMileage = latestMileage
+        index = len(listOfDailySums)
+        while index > 0:
+            index=index-1
+            currentDaySumElement = listOfDailySums[index]
+            #self._LOGGER.debug(f'Entry = {currentDaySumElement}')
+            entryDate = currentDaySumElement.get('date','2000-01-01')
+            if self.dailyTripData.get(vin,{})=={}:
+                self.dailyTripData[vin] = {}
+            if self.dailyTripData[vin].get(entryDate,{})!={}:
+                #entryDate is already present in self.dailyTripData
+                if currentDaySumElement.get('drivingTime',0.0) > self.dailyTripData[vin].get(entryDate,{}).get('drivingTime', 0.0):
+                    #Entry in self.dailyTripData does not represent the final values of the daily sum for the respective date
+                    self._LOGGER.debug(f'API returned more current daily sum trip data for {entryDate}. Updating history.')
+                    self.dailyTripData[vin][entryDate]['drivingTime'] = currentDaySumElement.get('drivingTime',0.0)
+                    self.dailyTripData[vin][entryDate]['distanceDriven'] = currentDaySumElement.get('distanceDriven',0.0)
+                    self.dailyTripData[vin][entryDate]['electricConsumption'] = currentDaySumElement.get('electricConsumption',0.0)
+                    self.dailyTripData[vin][entryDate]['fuelConsumption'] = currentDaySumElement.get('fuelConsumption',0.0)
+                    self.dailyTripData[vin][entryDate]['speed'] = currentDaySumElement.get('speed',0.0)
+                    self.dailyTripData[vin][entryDate]['endMileage'] = backwardCalculatedMileage
+                    if backwardCalculatedMileage!=latestMileage:
+                        self.dailyTripData[vin][entryDate]['comment'] = 'End mileage calculated backwards for an older date, because driving time changed.'
+                    updated = True
+                else:
+                    pass #self._LOGGER.debug(f'Daily sum trip data already present for {entryDate} and not shorter than the new data. Keeping it.')
+            else:
+                self.dailyTripData[vin][entryDate] = {}
+                self.dailyTripData[vin][entryDate]['date'] = entryDate
+                self.dailyTripData[vin][entryDate]['startMileage'] = backwardCalculatedMileage-int(currentDaySumElement.get('distanceDriven',0.0))
+                self.dailyTripData[vin][entryDate]['endMileage'] = backwardCalculatedMileage
+                self.dailyTripData[vin][entryDate]['electricConsumption'] = currentDaySumElement.get('electricConsumption',0.0)
+                self.dailyTripData[vin][entryDate]['fuelConsumption'] = currentDaySumElement.get('fuelConsumption',0.0)
+                self.dailyTripData[vin][entryDate]['drivingTime'] = currentDaySumElement.get('drivingTime',0.0)
+                self.dailyTripData[vin][entryDate]['distanceDriven'] = currentDaySumElement.get('distanceDriven',0.0)
+                self.dailyTripData[vin][entryDate]['speed'] = currentDaySumElement.get('speed',0.0)
+                self.dailyTripData[vin][entryDate]['comment'] = ''
+                if backwardCalculatedMileage!=latestMileage:
+                    self.dailyTripData[vin][entryDate]['comment'] = 'End mileage calculated backwards for an older date, because it was not already present in daily sum history.'
+                if backwardCalculatedMileage < 1:
+                    self._LOGGER.debug(f'Calculated mileage is inplausibly small. Perhaps a problem with the odometer sensor.')
+                    self.dailyTripData[vin][entryDate]['comment'] = 'Mileage is inplausibly small'
+                updated = True
+            if currentDaySumElement.get('distanceDriven',0.0)>0.0:
+                backwardCalculatedMileage = backwardCalculatedMileage - int(currentDaySumElement.get('distanceDriven',0.0))
+        return updated
+
+    def updateMonthlySumTripStatistics(self, newTripData: dict,vin: str) -> bool:
+        self._LOGGER.debug(self.anonymise(f'Updating monthly sum trip statistics for vehicle {vin}'))
+        listOfMonthlySums = newTripData.get('tripstatistics', {}).get('monthlySums',[])
+        updated = False
+        vehicle = self.vehicle(vin)
+        latestMileage:int = 0
+        if vehicle.is_distance_supported:
+            latestMileage = vehicle.distance
+        backwardCalculatedMileage = latestMileage
+        index = len(listOfMonthlySums)
+        while index > 0:
+            index=index-1
+            currentMonthSumElement = listOfMonthlySums[index]
+            #self._LOGGER.debug(f'Entry = {currentMonthSumElement}')
+            entryDate = currentMonthSumElement.get('date','2000-01-01')
+            if self.monthlyTripData.get(vin,{})=={}:
+                self.monthlyTripData[vin] = {}
+            if self.monthlyTripData[vin].get(entryDate,{})!={}:
+                #entryDate is already present in self.monthlyTripData
+                if currentMonthSumElement.get('drivingTime',0.0) > self.monthlyTripData[vin].get(entryDate,{}).get('drivingTime', 0.0):
+                    #Entry in self.monthlyTripData does not represent the final values of the monthly sum for the respective date
+                    self._LOGGER.debug(f'API returned more current monthly sum trip data for {entryDate}. Updating history.')
+                    self.monthlyTripData[vin][entryDate]['drivingTime'] = currentMonthSumElement.get('drivingTime',0.0)
+                    self.monthlyTripData[vin][entryDate]['distanceDriven'] = currentMonthSumElement.get('distanceDriven',0.0)
+                    self.monthlyTripData[vin][entryDate]['electricConsumption'] = currentMonthSumElement.get('electricConsumption',0.0)
+                    self.monthlyTripData[vin][entryDate]['fuelConsumption'] = currentMonthSumElement.get('fuelConsumption',0.0)
+                    self.monthlyTripData[vin][entryDate]['speed'] = currentMonthSumElement.get('speed',0.0)
+                    self.monthlyTripData[vin][entryDate]['endMileage'] = backwardCalculatedMileage
+                    if backwardCalculatedMileage!=latestMileage:
+                        self.monthlyTripData[vin][entryDate]['comment'] = 'End mileage calculated backwards for an older month, because driving time changed.'
+                    updated = True
+                else:
+                    pass #self._LOGGER.debug(f'Monthly sum trip data already present for {entryDate} and not shorter than the new data. Keeping it.')
+            else:
+                self.monthlyTripData[vin][entryDate] = {}
+                self.monthlyTripData[vin][entryDate]['date'] = entryDate
+                self.monthlyTripData[vin][entryDate]['startMileage'] = backwardCalculatedMileage - int(currentMonthSumElement.get('distanceDriven',0.0))
+                self.monthlyTripData[vin][entryDate]['endMileage'] = backwardCalculatedMileage
+                self.monthlyTripData[vin][entryDate]['electricConsumption'] = currentMonthSumElement.get('electricConsumption',0.0)
+                self.monthlyTripData[vin][entryDate]['fuelConsumption'] = currentMonthSumElement.get('fuelConsumption',0.0)
+                self.monthlyTripData[vin][entryDate]['drivingTime'] = currentMonthSumElement.get('drivingTime',0.0)
+                self.monthlyTripData[vin][entryDate]['distanceDriven'] = currentMonthSumElement.get('distanceDriven',0.0)
+                self.monthlyTripData[vin][entryDate]['speed'] = currentMonthSumElement.get('speed',0.0)
+                self.monthlyTripData[vin][entryDate]['comment'] = ''
+                if backwardCalculatedMileage!=latestMileage:
+                    self.monthlyTripData[vin][entryDate]['comment'] = 'End mileage calculated backwards for an older date, because it was not already present in daily sum history.'
+                if backwardCalculatedMileage < 1:
+                    self._LOGGER.debug(f'Calculated mileage is inplausibly small. Perhaps a problem with the odometer sensor.')
+                    self.monthlyTripData[vin][entryDate]['comment'] = 'Mileage is inplausibly small'
+                updated = True
+            if currentMonthSumElement.get('distanceDriven',0.0)>0.0:
+                backwardCalculatedMileage = backwardCalculatedMileage - int(currentMonthSumElement.get('distanceDriven',0.0))
+        return updated
+
+
 
  #### Class helpers ####
     @property
