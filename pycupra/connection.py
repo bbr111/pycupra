@@ -38,6 +38,7 @@ from .exceptions import (
     SeatTokenExpiredException,
     SeatException,
     SeatEULAException,
+    SeatMarketingConsentException,
     SeatThrottledException,
     SeatLoginFailedException,
     SeatInvalidRequestException,
@@ -173,6 +174,7 @@ class Connection:
         self.addToAnonymisationKeys('family_name')
         self.addToAnonymisationKeys('birthdate')
         self.addToAnonymisationKeys('vin')
+        self.addToAnonymisationKeys('mbbUserId')
         self._error401 = False
 
         try:
@@ -397,8 +399,8 @@ class Connection:
                         raise SeatLoginFailedException(errorTxt)
                     if 'terms-and-conditions' in location:
                         raise SeatEULAException('The terms and conditions must be accepted first at your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/"')
-                    #if 'consent' in location:
-                    #    raise SeatMarketingConsentException('The question to consent to marketing must be answered first at your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/"')
+                    if 'consent/marketing' in location:
+                        raise SeatMarketingConsentException('The question to consent to marketing must be answered first at your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/"')
                     if 'user_id' in location: # Get the user_id which is needed for some later requests
                         self._user_id=parse_qs(urlparse(location).query).get('user_id', [''])[0]
                         self.addToAnonymisationDict(self._user_id,'[USER_ID_ANONYMISED]')
@@ -499,9 +501,9 @@ class Connection:
         except (SeatEULAException):
             self._LOGGER.warning('Login failed, the terms and conditions might have been updated and need to be accepted. Login to  your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/" and accept the new terms before trying again')
             raise
-        #except (SeatMarketingConsentException):
-        #    self._LOGGER.warning('Login failed, the marketing conditions might have been updated and need to be accepted or disagreed. Login to  your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/" and accept the new terms before trying again')
-        #    raise
+        except (SeatMarketingConsentException):
+            self._LOGGER.warning('Login failed, the marketing conditions might have been updated and need to be accepted or disagreed. Login to  your local SEAT/Cupra site, e.g. "https://cupraid.vwgroup.io/" and accept the new terms before trying again')
+            raise
         except (SeatAccountLockedException):
             self._LOGGER.warning('Your account is locked, probably because of too many incorrect login attempts. Make sure that your account is not in use somewhere with incorrect password')
             raise
@@ -953,12 +955,6 @@ class Connection:
                         self._vehicles.append(Vehicle(self, newVehicle))
             except:
                 raise SeatLoginFailedException("Unable to fetch associated vehicles for account")
-        loop = asyncio.get_running_loop()
-        if not await loop.run_in_executor(None, self.readSumTripStatisticsFile, SUMTYPE_DAILY):
-            self._LOGGER.warning(f'readSumTripStatisticsFile() was not successful for {SUMTYPE_DAILY} sum data')
-        loop = asyncio.get_running_loop()
-        if not await loop.run_in_executor(None, self.readSumTripStatisticsFile, SUMTYPE_MONTHLY):
-            self._LOGGER.warning(f'readSumTripStatisticsFile() was not successful for {SUMTYPE_MONTHLY} sum data')
 
         # Update data for all vehicles
         await self.update_all()
@@ -1220,10 +1216,10 @@ class Connection:
                 data['tripstatistics']['monthlySums'] = convertTripStatisticsData(data.get('tripstatistics',{}).get('cyclic',{}))
                 if self.updateDailySumTripStatistics(data, vin):
                     loop = asyncio.get_running_loop()
-                    await loop.run_in_executor(None, self.writeSumTripStatisticsFile, SUMTYPE_DAILY)
+                    await loop.run_in_executor(None, self.writeSumTripStatisticsFile, self.vehicle(vin), SUMTYPE_DAILY)
                 if self.updateMonthlySumTripStatistics(data, vin):
                     loop = asyncio.get_running_loop()
-                    await loop.run_in_executor(None, self.writeSumTripStatisticsFile, SUMTYPE_MONTHLY)
+                    await loop.run_in_executor(None, self.writeSumTripStatisticsFile, self.vehicle(vin), SUMTYPE_MONTHLY)
                 return data
         except Exception as error:
             self._LOGGER.warning(f'Could not fetch trip statistics, error: {error}')
@@ -1927,87 +1923,81 @@ class Connection:
                 raise SeatException(f'Failed to set token for "{client}"')
             return True
 
-    def readSumTripStatisticsFile(self, sumType: str) -> bool:
+    def readSumTripStatisticsFile(self, vin: str, sumType: str):
         try:
-            self._LOGGER.debug(f"Reading {sumType} sum trip statistics files if present.")
-            for vehicle in self.vehicles:
-                csvFileName = os.path.join(self._dataBasePath, f"{vehicle.vin}_drivingData_{sumType}Sums.csv")
-                if not os.path.exists(csvFileName):
-                    self._LOGGER.warning(self.anonymise(f"Could not find {sumType} sum trip statistics file {csvFileName}. So starting without {sumType} sum trip statistics history."))
-                else:
-                    with open(csvFileName, newline='') as csvfile:
-                        reader = csv.DictReader(csvfile)
-                        for row in reader:
-                            data: dict[str, Any] = {}
-                            data['date']=row.get('date','2000-01-01')
-                            data['startMileage']=int(row.get('startMileage','0'))
-                            data['endMileage']=int(row.get('endMileage','0'))
-                            data['fuelConsumption']=float(row.get('fuelConsumption','0.0'))
-                            data['electricConsumption']=float(row.get('electricConsumption','0.0'))
-                            data['drivingTime']=float(row.get('drivingTime','0.0'))
-                            data['distanceDriven']=float(row.get('distanceDriven','0.0'))
-                            data['speed']=float(row.get('speed','0.0'))
-                            data['comment']=row.get('comment','')
-                            if sumType == SUMTYPE_MONTHLY:
-                                if self.monthlyTripData.get(vehicle.vin,None)==None:
-                                    self.monthlyTripData[vehicle.vin]={}
-                                self.monthlyTripData[vehicle.vin][(data.get('date','2000-01-01'))] = data
-                            else:
-                                if self.dailyTripData.get(vehicle.vin,None)==None:
-                                    self.dailyTripData[vehicle.vin]={}
-                                self.dailyTripData[vehicle.vin][(data.get('date','2000-01-01'))] = data
-                        csvfile.close()
-            return True
-        except Exception as error:
-            self._LOGGER.error(f"Error while reading {sumType} sum trip statistics file. Error: {error}.")
-            raise SeatException(f"Error while trying to read {sumType} sum trip statistics file")
-        return False
-
-    def writeSumTripStatisticsFile(self, sumType: str) -> bool:
-        try:
-            for vehicle in self.vehicles:
-                csvFileName = os.path.join(self._dataBasePath, f"{vehicle.vin}_drivingData_{sumType}Sums.csv")
-                if os.path.exists(csvFileName):
-                    os.replace(csvFileName, csvFileName+".old")
-
-                with open(csvFileName, 'w', newline='') as csvfile:
-                    fieldnames = ['rowNo','date', 'distanceDriven', 'startMileage', 'endMileage',  'drivingTime', 'fuelConsumption', 'electricConsumption', 'speed', 'comment']
-                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                    writer.writeheader()
-                    rowCounter = 0
-                    if sumType == SUMTYPE_MONTHLY:
-                        vehiclesSumTripData = self.monthlyTripData.get(vehicle.vin,{})
-                    else:
-                        vehiclesSumTripData = self.dailyTripData.get(vehicle.vin,{})
-                    listOfDatesSorted = sorted(vehiclesSumTripData)
-
-                    for entryDate in listOfDatesSorted:
+            self._LOGGER.debug(self.anonymise(f"Reading {sumType} sum trip statistics file for vehicle {vin} if present."))
+            csvFileName = os.path.join(self._dataBasePath, f"{vin}_drivingData_{sumType}Sums.csv")
+            if not os.path.exists(csvFileName):
+                self._LOGGER.warning(self.anonymise(f"Could not find {sumType} sum trip statistics file {csvFileName}. So starting without {sumType} sum trip statistics history."))
+            else:
+                with open(csvFileName, newline='') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    for row in reader:
+                        data: dict[str, Any] = {}
+                        data['date']=row.get('date','2000-01-01')
+                        data['startMileage']=int(row.get('startMileage','0'))
+                        data['endMileage']=int(row.get('endMileage','0'))
+                        data['fuelConsumption']=float(row.get('fuelConsumption','0.0'))
+                        data['electricConsumption']=float(row.get('electricConsumption','0.0'))
+                        data['drivingTime']=float(row.get('drivingTime','0.0'))
+                        data['distanceDriven']=float(row.get('distanceDriven','0.0'))
+                        data['speed']=float(row.get('speed','0.0'))
+                        data['comment']=row.get('comment','')
                         if sumType == SUMTYPE_MONTHLY:
-                            trip = self.monthlyTripData.get(vehicle.vin,{}).get(entryDate,{})
+                            if self.monthlyTripData.get(vin,None)==None:
+                                self.monthlyTripData[vin]={}
+                            self.monthlyTripData[vin][(data.get('date','2000-01-01'))] = data
                         else:
-                            trip = self.dailyTripData.get(vehicle.vin,{}).get(entryDate,{})
-                        if trip=={}:
-                            self._LOGGER.warning(f'Did not find trip for date {entryDate}')
-                            return False
-                        writer.writerow({
-                            'rowNo': rowCounter,
-                            'date': trip.get('date',''),
-                            'distanceDriven': trip.get('distanceDriven',0.0),
-                            'startMileage': trip.get('startMileage',0),
-                            'endMileage': trip.get('endMileage',0),
-                            'drivingTime': trip.get('drivingTime',0.0),
-                            'fuelConsumption': trip.get('fuelConsumption',0.0),
-                            'electricConsumption': trip.get('electricConsumption',0.0),
-                            'speed': trip.get('speed',0.0),
-                            'comment': trip.get('comment',''),
-                            })
-                        rowCounter = rowCounter +1
+                            if self.dailyTripData.get(vin,None)==None:
+                                self.dailyTripData[vin]={}
+                            self.dailyTripData[vin][(data.get('date','2000-01-01'))] = data
                     csvfile.close()
-            return True
         except Exception as error:
-            self._LOGGER.error(f"Error while writing {sumType} sum trip statistics file. Error: {error}.")
-            raise SeatException(f"Error while trying to write {sumType} sum trip statistics to file")
-        return False
+            self._LOGGER.error(self.anonymise(f"Error while reading {sumType} sum trip statistics file for vehicle {vin}. Error: {error}."))
+            raise SeatException(self.anonymise(f"Error while trying to read {sumType} sum trip statistics file for vehicle {vin}"))
+
+    def writeSumTripStatisticsFile(self, vehicle: Vehicle, sumType: str):
+        try:
+            csvFileName = os.path.join(self._dataBasePath, f"{vehicle.vin}_drivingData_{sumType}Sums.csv")
+            if os.path.exists(csvFileName):
+                os.replace(csvFileName, csvFileName+".old")
+
+            with open(csvFileName, 'w', newline='') as csvfile:
+                fieldnames = ['rowNo','date', 'distanceDriven', 'startMileage', 'endMileage',  'drivingTime', 'fuelConsumption', 'electricConsumption', 'speed', 'comment']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                rowCounter = 0
+                if sumType == SUMTYPE_MONTHLY:
+                    vehiclesSumTripData = self.monthlyTripData.get(vehicle.vin,{})
+                else:
+                    vehiclesSumTripData = self.dailyTripData.get(vehicle.vin,{})
+                listOfDatesSorted = sorted(vehiclesSumTripData)
+
+                for entryDate in listOfDatesSorted:
+                    if sumType == SUMTYPE_MONTHLY:
+                        trip = self.monthlyTripData.get(vehicle.vin,{}).get(entryDate,{})
+                    else:
+                        trip = self.dailyTripData.get(vehicle.vin,{}).get(entryDate,{})
+                    if trip=={}:
+                        self._LOGGER.warning(f'Did not find trip for date {entryDate}')
+                    writer.writerow({
+                        'rowNo': rowCounter,
+                        'date': trip.get('date',''),
+                        'distanceDriven': trip.get('distanceDriven',0.0),
+                        'startMileage': trip.get('startMileage',0),
+                        'endMileage': trip.get('endMileage',0),
+                        'drivingTime': trip.get('drivingTime',0.0),
+                        'fuelConsumption': trip.get('fuelConsumption',0.0),
+                        'electricConsumption': trip.get('electricConsumption',0.0),
+                        'speed': trip.get('speed',0.0),
+                        'comment': trip.get('comment',''),
+                        })
+                    rowCounter = rowCounter +1
+                csvfile.close()
+            self._LOGGER.debug(self.anonymise(f"Wrote {sumType} sum trip statistics file for vehicle {vehicle.vin}."))
+        except Exception as error:
+            self._LOGGER.error(self.anonymise(f"Error while writing {sumType} sum trip statistics file for vehicle {vehicle.vin}. Error: {error}."))
+            raise SeatException(self.anonymise(f"Error while trying to write {sumType} sum trip statistics to file for vehicle {vehicle.vin}"))
 
     def updateDailySumTripStatistics(self, newTripData: dict,vin: str) -> bool:
         self._LOGGER.debug(self.anonymise(f'Updating daily sum trip statistics for vehicle {vin}'))
@@ -2028,7 +2018,8 @@ class Connection:
                 self.dailyTripData[vin] = {}
             if self.dailyTripData[vin].get(entryDate,{})!={}:
                 #entryDate is already present in self.dailyTripData
-                if currentDaySumElement.get('drivingTime',0.0) > self.dailyTripData[vin].get(entryDate,{}).get('drivingTime', 0.0):
+                if currentDaySumElement.get('drivingTime',0.0) > self.dailyTripData[vin].get(entryDate,{}).get('drivingTime', 0.0) or \
+                    currentDaySumElement.get('distanceDriven',0.0) > self.dailyTripData[vin].get(entryDate,{}).get('distanceDriven', 0.0):
                     #Entry in self.dailyTripData does not represent the final values of the daily sum for the respective date
                     self._LOGGER.debug(f'API returned more current daily sum trip data for {entryDate}. Updating history.')
                     self.dailyTripData[vin][entryDate]['drivingTime'] = currentDaySumElement.get('drivingTime',0.0)
@@ -2041,7 +2032,11 @@ class Connection:
                         self.dailyTripData[vin][entryDate]['comment'] = 'End mileage calculated backwards for an older date, because driving time changed.'
                     updated = True
                 else:
-                    pass #self._LOGGER.debug(f'Daily sum trip data already present for {entryDate} and not shorter than the new data. Keeping it.')
+                    if index == len(listOfDailySums) -1 and latestMileage > self.dailyTripData[vin][entryDate]['endMileage']:
+                        self._LOGGER.debug(f'Corrected end mileage for latest daily sum.')
+                        self.dailyTripData[vin][entryDate]['endMileage'] = latestMileage
+                        updated = True
+                    #pass #self._LOGGER.debug(f'Daily sum trip data already present for {entryDate} and not shorter than the new data. Keeping it.')
             else:
                 self.dailyTripData[vin][entryDate] = {}
                 self.dailyTripData[vin][entryDate]['date'] = entryDate
@@ -2082,7 +2077,8 @@ class Connection:
                 self.monthlyTripData[vin] = {}
             if self.monthlyTripData[vin].get(entryDate,{})!={}:
                 #entryDate is already present in self.monthlyTripData
-                if currentMonthSumElement.get('drivingTime',0.0) > self.monthlyTripData[vin].get(entryDate,{}).get('drivingTime', 0.0):
+                if currentMonthSumElement.get('drivingTime',0.0) > self.monthlyTripData[vin].get(entryDate,{}).get('drivingTime', 0.0) or \
+                    currentMonthSumElement.get('distanceDriven',0.0) > self.monthlyTripData[vin].get(entryDate,{}).get('distanceDriven', 0.0):
                     #Entry in self.monthlyTripData does not represent the final values of the monthly sum for the respective date
                     self._LOGGER.debug(f'API returned more current monthly sum trip data for {entryDate}. Updating history.')
                     self.monthlyTripData[vin][entryDate]['drivingTime'] = currentMonthSumElement.get('drivingTime',0.0)
@@ -2095,7 +2091,11 @@ class Connection:
                         self.monthlyTripData[vin][entryDate]['comment'] = 'End mileage calculated backwards for an older month, because driving time changed.'
                     updated = True
                 else:
-                    pass #self._LOGGER.debug(f'Monthly sum trip data already present for {entryDate} and not shorter than the new data. Keeping it.')
+                    if index == len(listOfMonthlySums) -1 and latestMileage > self.monthlyTripData[vin][entryDate]['endMileage']:
+                        self._LOGGER.debug(f'Corrected end mileage for latest monthly sum.')
+                        self.monthlyTripData[vin][entryDate]['endMileage'] = latestMileage
+                        updated = True
+                    #pass #self._LOGGER.debug(f'Monthly sum trip data already present for {entryDate} and not shorter than the new data. Keeping it.')
             else:
                 self.monthlyTripData[vin][entryDate] = {}
                 self.monthlyTripData[vin][entryDate]['date'] = entryDate

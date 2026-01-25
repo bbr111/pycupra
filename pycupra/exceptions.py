@@ -54,6 +54,14 @@ class SeatEULAException(Exception):
         super(SeatEULAException, self).__init__(status)
         self.status = status
 
+class SeatMarketingConsentException(Exception):
+    """Raised when question to marketing consent must be accepted before login"""
+
+    def __init__(self, status):
+        """Initialize exception"""
+        super(SeatMarketingConsentException, self).__init__(status)
+        self.status = status
+
 class SeatLoginFailedException(Exception):
     """Raised when login fails for an unknown reason"""
 

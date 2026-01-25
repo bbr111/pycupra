@@ -28,6 +28,8 @@ from .const import (
     FIREBASE_STATUS_ACTIVATION_FAILED,
     FIREBASE_STATUS_ACTIVATION_STOPPED,
     FIREBASE_STATUS_NOT_WANTED,
+    SUMTYPE_DAILY,
+    SUMTYPE_MONTHLY,
 )
 
 from .firebase import Firebase, readFCMCredsFile, writeFCMCredsFile
@@ -154,6 +156,12 @@ class Vehicle:
        
         # Get URLs for model image
         self._modelimages = await self.get_modelimageurl()
+        # Read daily and monthly sum files if first callo of discover() and vehicle has capability 'tripStatistics'
+        if not self._discovered and self._relevantCapabilties.get('tripStatistics', {}).get('active', False):
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._connection.readSumTripStatisticsFile, self.vin, SUMTYPE_DAILY)
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self._connection.readSumTripStatisticsFile, self.vin, SUMTYPE_MONTHLY)
 
         self._discovered = datetime.now()
 
