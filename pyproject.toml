@@ -2,8 +2,7 @@
 requires = ["setuptools"]
 
 [tool.setuptools.packages.find]
-exclude = ["www"]
-exclude = ["pycupra_data"]
+exclude = ["www","pycupra_data"]
 
 [project]
 name = "pycupra"

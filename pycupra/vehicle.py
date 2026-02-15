@@ -198,7 +198,7 @@ class Vehicle:
 
                     fullUpdateExpired = datetime.now(tz=None) - timedelta(seconds= 1700)
                     oldMileage = self.distance
-                    if self._last_get_mileage < datetime.now(tz=None) - timedelta(seconds= 300):
+                    if self._last_get_mileage < datetime.now(tz=None) - timedelta(seconds= 120):
                         await self.get_mileage()
                         if self.distance > oldMileage:
                             # self.distance has changed. So it's time for a full update
