@@ -45,6 +45,7 @@ COMPONENTS = {
 
 RESOURCES = [
 		"adblue_level",
+        "adblue_range",
         "area_alarm",
 		"auxiliary_climatisation",
 		"battery_level",
@@ -95,6 +96,7 @@ RESOURCES = [
 		"hood_closed",
 		"last_connected",
 		"last_full_update",
+		"last_known_position",
 		"lock_action_status",
 		"oil_inspection",
 		"oil_inspection_distance",

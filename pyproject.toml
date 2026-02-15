@@ -3,10 +3,11 @@ requires = ["setuptools"]
 
 [tool.setuptools.packages.find]
 exclude = ["www"]
+exclude = ["pycupra_data"]
 
 [project]
 name = "pycupra"
-version = "0.2.12"
+version = "0.2.13"
 description="A library to read and send vehicle data via Cupra/Seat portal using the same API calls as the MyCupra/MySeat mobile app."
 readme="README.md"
 license = "Apache-2.0"

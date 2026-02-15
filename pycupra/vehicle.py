@@ -282,14 +282,21 @@ class Vehicle:
         return await self._connection.getModelImageURL(self.vin, self._apibase)
 
     async def get_basiccardata(self) -> bool:
-        """Fetch basic car data."""
+        """Fetch basic car and range data."""
+        bothSuccessful = True
         data = await self._connection.getBasicCarData(self.vin, self._apibase)
         if data:
             self._states.update(data)
-            return True
         else:
             self._LOGGER.debug('Could not fetch basic car data')
-            return False
+            bothSuccessful = False
+        data = await self._connection.getRanges(self.vin, self._apibase)
+        if data:
+            self._states.update(data)
+        else:
+            self._LOGGER.debug('Could not fetch range data')
+            bothSuccessful = False
+        return bothSuccessful
 
     async def get_mileage(self) -> bool:
         """Fetch basic car data."""
@@ -346,14 +353,17 @@ class Vehicle:
             data = await self._connection.getPosition(self.vin, self._apibase)
             if data:
                 # Reset requests remaining to 15 if parking time has been updated
-                if data.get('findCarResponse', {}).get('parkingTimeUTC', False):
-                    try:
-                        newTime = data.get('findCarResponse').get('parkingTimeUTC')
-                        oldTime = self.attrs.get('findCarResponse').get('parkingTimeUTC')
-                        if newTime > oldTime:
-                            self.requests_remaining = 15
-                    except:
-                        pass
+                #if data.get('findCarResponse', {}).get('parkingTimeUTC', False):
+                #    try:
+                #        newTime = data.get('findCarResponse').get('parkingTimeUTC')
+                #        oldTime = self.attrs.get('findCarResponse').get('parkingTimeUTC')
+                #        if newTime > oldTime:
+                #            self.requests_remaining = 15
+                #    except:
+                #        pass
+                if data.get('findCarResponse',{}):
+                    # To update the last known position, if the API provided a position
+                    data['lastValidFindCarResponse']=data.get('findCarResponse',{})
                 self._states.update(data)
                 self._last_get_position = datetime.now(tz=None)
                 return True
@@ -2142,10 +2152,21 @@ class Vehicle:
         """Return battery level"""
         #if self.attrs.get('charging', False):
         #    return int(self.attrs.get('charging').get('status', {}).get('battery', {}).get('currentSocPercentage', 0))
+        #if self.attrs.get('mycar', False):
+        #    return int(self.attrs.get('mycar',{}).get('services', {}).get('charging', {}).get('currentPct', 0))
+        #else:
+        #    return 0
+        level = 0
         if self.attrs.get('mycar', False):
-            return int(self.attrs.get('mycar',{}).get('services', {}).get('charging', {}).get('currentPct', 0))
-        else:
-            return 0
+            level = int(self.attrs.get('mycar',{}).get('services', {}).get('charging', {}).get('currentPct', 0))
+        if level == 0:
+            if self.attrs.get('charging', False):
+                if int(self.attrs.get('charging').get('status', {}).get('battery', {}).get('currentSocPercentage', 0)) > 0:
+                    level = int(self.attrs.get('charging').get('status', {}).get('battery', {}).get('currentSocPercentage', 0))
+                    self._LOGGER.warning('Battery level according to mycar data is zero. Using data from charging status.')
+                else:
+                    self._LOGGER.warning('Battery level according to mycar data and charging status is zero. So it is really zero or both API endpoints show a temporary malfunction.')
+        return level
 
     @property
     def is_battery_level_supported(self) -> bool:
@@ -2402,10 +2423,18 @@ class Vehicle:
         else:
             return False
 
+    @property
+    def is_target_soc_changeable(self) -> bool:
+        """Target state of charge may be changed."""
+        if self._relevantCapabilties.get('charging', {}).get('active', False) and self._relevantCapabilties.get('charging', {}).get('supportsTargetStateOfCharge', False):
+            return True
+        else:
+            return False
+
     # Vehicle location states
     @property
     def position(self):
-        """Return  position."""
+        """Return position."""
         output = {}
         try:
             if self.vehicle_moving:
@@ -2442,6 +2471,37 @@ class Vehicle:
         elif self.attrs.get('isMoving', False):
             return True
         return False
+
+    @property
+    def last_known_position(self):
+        """Return last known position."""
+        output = {
+            'lat': '?',
+            'lng': '?',
+        }
+        try:
+            if self.attrs.get('lastValidFindCarResponse', {}):
+                posObj = self.attrs.get('lastValidFindCarResponse', {})
+                lat = posObj.get('lat')
+                lng = posObj.get('lon')
+                position_to_address = posObj.get('position_to_address')
+                parkingTime = posObj.get('parkingTimeUTC', None)
+                output = {
+                    'lat' : lat,
+                    'lng' : lng,
+                    'address': position_to_address,
+                    'timestamp' : parkingTime
+                }
+        except:
+            output = {
+                'lat': '?',
+                'lng': '?',
+            }
+        return output
+
+    @property
+    def is_last_known_position_supported(self) -> bool:
+        return self.is_position_supported
 
     @property
     def vehicle_moving(self) -> bool:
@@ -2589,6 +2649,26 @@ class Vehicle:
     def is_combined_range_supported(self) -> bool:
         if self.is_combustion_range_supported and self.is_electric_range_supported:
             return True
+        return False
+
+    @property
+    def adblue_range(self) -> int:
+        """Return adblue range."""
+        if self.attrs.get('ranges', False):
+            filteredItems = [rangeItem for rangeItem in self.attrs.get('ranges', False) if rangeItem['rangeName'] == 'adBlueKm']
+            #filteredItems = [rangeItem for rangeItem in self.attrs.get('ranges', False) if rangeItem['rangeName'] == 'gasolineRangeKm']
+            if len(filteredItems)>0:
+                return filteredItems[0].get('value', 0.0)
+        return 0.0
+
+    @property
+    def is_adblue_range_supported(self) -> bool:
+        """Return true if adblue range is supported."""
+        if self.attrs.get('ranges', False):
+            filteredItems = [rangeItem for rangeItem in self.attrs.get('ranges', False) if rangeItem['rangeName'] == 'adBlueKm']
+            #filteredItems = [rangeItem for rangeItem in self.attrs.get('ranges', False) if rangeItem['rangeName'] == 'gasolineRangeKm']
+            if len(filteredItems)>0:
+                return True
         return False
 
     @property

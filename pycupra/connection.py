@@ -74,6 +74,7 @@ from .const import (
     API_PSP,
     API_VEHICLES,
     API_MYCAR,
+    API_RANGES,
     API_STATUS,
     API_CHARGING,
     API_CHARGING_PROFILES,
@@ -1014,6 +1015,24 @@ class Connection:
             return False
         return data
 
+    async def getRanges(self, vin, baseurl) -> dict | bool:
+        """Get range information"""
+        await self.set_token(self._session_auth_brand)
+        data={}
+        try:
+            response = await self.get(API_RANGES.format(baseurl=baseurl, vin=vin))
+            if response.get('ranges', {}):
+                data['ranges']= response.get('ranges', {})
+            elif response.get('status_code', {}):
+                self._LOGGER.warning(f'Could not fetch range information, HTTP status code: {response.get("status_code")}')
+            else:
+                self._LOGGER.info('Unhandled error while trying to fetch range data')
+        except Exception as error:
+            self._LOGGER.warning(f'Could not fetch range data, error: {error}')
+        if data=={}:
+            return False
+        return data
+
     async def getMileage(self, vin, baseurl) -> dict | bool:
         """Get car information from customer profile, VIN, nickname, etc."""
         await self.set_token(self._session_auth_brand)
@@ -1249,7 +1268,7 @@ class Connection:
                     self._LOGGER.debug(f'Seems car is moving, HTTP 204 received from position')
                     data = {
                         'isMoving': True,
-                        'rate_limit_remaining': 15
+                        #'rate_limit_remaining': 15
                     }
                     return data
                 else:

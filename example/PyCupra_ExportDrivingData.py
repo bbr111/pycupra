@@ -40,6 +40,9 @@ def readCredentialsFile():
         return None
 
 def exportToCSV(vehicle, csvFileName, dataType='dailySums'):
+    if len(vehicle.attrs.get('tripstatistics', {}).get(dataType, []))< 1:
+        _LOGGER.warning(f'No trips statistics of type {dataType}')
+        return False
     df= pd.DataFrame(vehicle._states['tripstatistics'][dataType])
     _LOGGER.debug('Exporting trip data to csv')
     df.to_csv(csvFileName)

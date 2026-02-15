@@ -131,6 +131,7 @@ API_PERSONAL_DATA= 'https://customer-profile.vwgroup.io/v3/customers/{userId}/pe
 
 API_VEHICLES = '{APP_URI}/v2/users/{userId}/garage/vehicles'                                  # Garage info
 API_MYCAR = '{baseurl}/v5/users/{userId}/vehicles/{vin}/mycar'                                # Vehicle status report
+API_RANGES = '{baseurl}/v1/vehicles/{vin}/ranges'                                             # Range information
 API_CHARGING = '{baseurl}/v1/vehicles/{vin}/charging'                                                # Vehicle charging information 
 API_CHARGING_PROFILES = '{baseurl}/vehicles/{vin}/charging/profiles'                                 # Vehicle charging profile information 
 #API_OPERLIST = '{homeregion}/api/rolesrights/operationlist/v3/vehicles/{vin}'                       # API Endpoint for supported operations

@@ -228,6 +228,82 @@ class Climate(Instrument):
         pass
 
 
+class Number(Instrument):
+    def __init__(self, attr, name, icon):
+        super().__init__(component="number", attr=attr, name=name, icon=icon)
+
+    @property
+    def is_mutable(self) -> bool:
+        return self.mutable
+
+    @property
+    def min_value(self):
+        pass
+
+    @property
+    def max_value(self):
+        pass
+
+    @property
+    def step(self):
+        pass
+
+    @property
+    def value(self) -> None:
+        pass
+
+    def set_value(self, **kwargs) -> None:
+        pass
+
+class TargetStateOfChargeNumber(Number):
+    def __init__(self):
+        super().__init__(attr="target_soc", name="Target state of charge", icon="mdi:battery-positive")
+
+    def setup(self, vehicle, **config) -> bool:
+        if vehicle._logPrefix!= None:
+            self._LOGGER= logging.getLogger(__name__+"_"+vehicle._logPrefix)
+        else:
+            self._LOGGER = _LOGGER
+
+        self.vehicle = vehicle
+        if not self.is_supported:
+            return False
+        if not vehicle.is_target_soc_changeable:
+            self._LOGGER.debug("target_soc is not changeable. So number instrument 'Target state of charge' is deactivated")
+            return False
+        self.configurate(**config)
+        return True
+
+    def configurate(self, **config):
+        self.mutable = config.get('mutable', False)
+        if not self.vehicle.is_target_soc_changeable:
+            self.mutable = False
+
+    @property
+    def min_value(self):
+        return 10
+
+    @property
+    def max_value(self):
+        return 100
+
+    @property
+    def step(self):
+        return 10
+
+    @property
+    def value(self):
+        #if self.vehicle._requests.get('climatisation', {}).get('id', False):
+        #    self._LOGGER.debug('A climatisation request is active. Setting the climatisation target temperature to new wanted state (if present).')
+        #    if self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('climatisation_target_temperature', None)!=None:
+        #        return self.vehicle._wantedStateOfProperty.get('climatisation',{}).get('settings',{}).get('climatisation_target_temperature', None)
+        return self.vehicle.target_soc
+
+    async def set_value(self, newValue):
+        self._LOGGER.debug(f'Target state of charge shall be set to {newValue}.')
+        await self.vehicle.set_charger_target_soc(newValue)
+
+
 class ElectricClimatisationClimate(Climate):
     def __init__(self):
         super().__init__(attr="electric_climatisation", name="Electric Climatisation", icon="mdi:radiator")
@@ -347,6 +423,53 @@ class Position(Instrument):
             state.get("address", "?"),
             time,
         )
+
+    @property
+    def attributes(self):
+        attrs = {}
+        attrs['positionToAddress'] = self.state[2]
+        return dict(attrs)
+
+class LastKnownPosition(Instrument):
+    def __init__(self):
+        super().__init__(component="device_tracker", attr="last_known_position", name="Last known position")
+
+    @property
+    def is_mutable(self) -> bool:
+        return False
+
+    @property
+    def state(self):
+        state = super().state #or {}
+        return (
+            state.get("lat", "?"),
+            state.get("lng", "?"),
+            state.get("address", "?"),
+            state.get("timestamp", None),
+        )
+
+    @property
+    def str_state(self) -> tuple:
+        state = super().state #or {}
+        ts = state.get("timestamp", None)
+        if isinstance(ts, str):
+            time = str(datetime.strptime(ts,'%Y-%m-%dT%H:%M:%SZ').astimezone(tz=None))
+        elif isinstance(ts, datetime):
+            time = str(ts.astimezone(tz=None))
+        else:
+            time = None
+        return (
+            state.get("lat", "?"),
+            state.get("lng", "?"),
+            state.get("address", "?"),
+            time,
+        )
+
+    @property
+    def attributes(self):
+        attrs = {}
+        attrs['positionToAddress'] = self.state[2]
+        return dict(attrs)
 
 
 class DoorLock(Instrument):
@@ -1422,6 +1545,7 @@ class AreaAlarm(BinarySensor):
 def create_instruments():
     return [
         Position(),
+        LastKnownPosition(),
         DoorLock(),
         #TrunkLock(),
         RequestFlash(),
@@ -1460,6 +1584,7 @@ def create_instruments():
         DepartureProfile3(),
         ChargingState(),
         AreaAlarm(),
+        TargetStateOfChargeNumber(),
         Sensor(
             attr="distance",
             name="Odometer",
@@ -1589,6 +1714,13 @@ def create_instruments():
         Sensor(
             attr="combined_range",
             name="Combined range",
+            icon="mdi:car",
+            unit="km",
+            device_class="distance"
+        ),
+        Sensor(
+            attr="adblue_range",
+            name="AdBlue range",
             icon="mdi:car",
             unit="km",
             device_class="distance"
