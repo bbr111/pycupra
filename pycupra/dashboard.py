@@ -2156,6 +2156,284 @@ def create_instruments():
     ]
 
 
+class EUDAInstrument:
+    def __init__(self, component, attr, name, icon=None):
+        self.attr = attr
+        self.component = component
+        self.name = name
+        self.vehicle = None
+        self.icon = icon
+        self.callback = None
+
+    def __repr__(self):
+        return self.full_name
+
+    def configurate(self, **args):
+        pass
+
+    @property
+    def slug_attr(self):
+        return camel2slug(self.attr.replace(".", "_"))
+
+    def setup(self, vehicle, **config) -> bool:
+        if vehicle._logPrefix!= None:
+            self._LOGGER= logging.getLogger(__name__+"_"+vehicle._logPrefix)
+        else:
+            self._LOGGER = _LOGGER
+
+        self.vehicle = vehicle
+        if not self.is_supported:
+            return False
+
+        self.configurate(**config)
+        return True
+
+    @property
+    def vehicle_name(self):
+        return self.vehicle.vin
+
+    @property
+    def full_name(self):
+        return f"{self.vehicle_name} {self.name}"
+
+    @property
+    def is_mutable(self):
+        raise NotImplementedError("Must be set")
+
+    @property
+    def str_state(self):
+        return self.state
+
+    @property
+    def state(self):
+        if hasattr(self.vehicle, self.attr):
+            return getattr(self.vehicle, self.attr)
+        else:
+            self._LOGGER.debug(f'Could not find attribute "{self.attr}"')
+        return self.vehicle.get_attr(self.attr)
+
+    @property
+    def attributes(self):
+        if self.name.startswith("Last long length"):
+            if self.vehicle.is_long_term_start_mileage_supported:
+                attrs = {}
+                attrs['start mileage'] = self.vehicle.long_term_start_mileage
+                return attrs
+        if self.name.startswith("Last short length"):
+            if self.vehicle.is_short_term_start_mileage_supported:
+                attrs = {}
+                attrs['start mileage'] = self.vehicle.short_term_start_mileage
+                return attrs
+        if self.name.startswith("Parking brake") or self.name.startswith("Outside temperature"):
+            if hasattr(self.vehicle, self.attr + "_timestamp"):
+                attrs = {}
+                timeStampFunc = getattr(self.vehicle, self.attr + "_timestamp")
+                attrs['time stamp'] = timeStampFunc()
+                return attrs
+        return {}
+
+    @property
+    def is_supported(self):
+        supported = 'is_' + self.attr + "_supported"
+        if hasattr(self.vehicle, supported):
+            return getattr(self.vehicle, supported)
+        else:
+            return False
+
+
+class EUDASensor(EUDAInstrument):
+    def __init__(self, attr, name, icon, unit=None, device_class=None):
+        super().__init__(component="sensor", attr=attr, name=name, icon=icon)
+        self.device_class = device_class
+        self.unit = unit
+        self.convert = False
+
+    @property
+    def is_mutable(self) -> bool:
+        return False
+
+    @property
+    def str_state(self):
+        if self.unit:
+            return f'{self.state} {self.unit}'
+        else:
+            return f'{self.state}'
+
+    def configurate(self, **config) -> None:
+        pass
+        #if self.unit and config.get('miles', False) is True:
+        #    if "km" == self.unit:
+        #        self.unit = "mi"
+        #        self.convert = True
+        #    elif "km/h" == self.unit:
+        #        self.unit = "mi/h"
+        #        self.convert = True
+        #    elif "l/100km" == self.unit:
+        #        self.unit = "l/100 mi"
+        #        self.convert = True
+        #    elif "kWh/100km" == self.unit:
+        #        self.unit = "kWh/100 mi"
+        #        self.convert = True
+        #elif self.unit and config.get('scandinavian_miles', False) is True:
+        #    if "km" == self.unit:
+        #        self.unit = "mil"
+        #    elif "km/h" == self.unit:
+        #        self.unit = "mil/h"
+        #    elif "l/100km" == self.unit:
+        #        self.unit = "l/100 mil"
+        #    elif "kWh/100km" == self.unit:
+        #        self.unit = "kWh/100 mil"
+
+    @property
+    def state(self):
+        val = super().state
+        return val
+        # Convert to miles
+        #if val and self.unit and "mi" in self.unit and self.convert is True:
+        #    return int(round(val / 1.609344))
+        #elif val and self.unit and "mi/h" in self.unit and self.convert is True:
+        #    return int(round(val / 1.609344))
+        #elif val and self.unit and "gal/100 mi" in self.unit and self.convert is True:
+        #    return round(val * 0.4251438, 1)
+        #elif val and self.unit and "kWh/100 mi" in self.unit and self.convert is True:
+        #    return round(val * 0.4251438, 1)
+        #elif val and self.unit and "°F" in self.unit and self.convert is True:
+        #    temp = round((val * 9 / 5) + 32, 1)
+        #    return temp
+        #elif val and self.unit in ['mil', 'mil/h']:
+        #    return val / 10
+        #else:
+        #    return val
+
+class EUDABinarySensor(EUDAInstrument):
+    def __init__(self, attr, name, device_class, icon='', reverse_state=False):
+        super().__init__(component="binary_sensor", attr=attr, name=name, icon=icon)
+        self.device_class = device_class
+        self.reverse_state = reverse_state
+
+    @property
+    def is_mutable(self) -> bool:
+        return False
+
+    @property
+    def str_state(self):
+        if self.device_class in ["door", "window"]:
+            return "Closed" if self.state else "Open"
+        if self.device_class == "lock":
+            return "Locked" if self.state else "Unlocked"
+        if self.device_class == "safety":
+            return "Warning!" if self.state else "OK"
+        if self.device_class == "plug":
+            return "Connected" if self.state else "Disconnected"
+        if self.state is None:
+            self._LOGGER.error(f"Can not encode state {self.attr} {self.state}")
+            return "?"
+        return "On" if self.state else "Off"
+
+    @property
+    def state(self):
+        val = super().state
+
+        if isinstance(val, (bool, list)):
+            if self.reverse_state:
+                if bool(val):
+                    return False
+                else:
+                    return True
+            else:
+                return bool(val)
+        elif isinstance(val, str):
+            return val != "Normal"
+        return val
+
+    @property
+    def is_on(self):
+        return self.state
+
+def create_eudaInstruments():
+    return [
+        EUDASensor(
+            attr="outside_temperature",
+            name="Outside temperature",
+            icon="mdi:thermometer",
+            unit="°C",
+            device_class="temperature"
+        ),
+        EUDASensor(
+            attr="oil_level",
+            name="Oil level",
+            icon="mdi:oil",
+            unit="%",
+        ),
+        EUDASensor(
+            attr="long_term_average_speed",
+            name="Last long average speed",
+            icon="mdi:speedometer",
+            unit="km/h",
+            device_class="speed"
+        ),
+        EUDASensor(
+            attr="long_term_average_electric_consumption",
+            name="Last long average electric consumption",
+            icon="mdi:car-battery",
+            unit="kWh/100km",
+            device_class="energy_distance"
+        ),
+        EUDASensor(
+            attr="long_term_average_fuel_consumption",
+            name="Last long average fuel consumption",
+            icon="mdi:fuel",
+            unit="l/100km",
+        ),
+        EUDASensor(
+            attr="long_term_duration",
+            name="Last long duration",
+            icon="mdi:clock",
+            unit="min",
+            device_class="duration"
+        ),
+        EUDASensor(
+            attr="long_term_distance",
+            name="Last long length",
+            icon="mdi:map-marker-distance",
+            unit="km",
+            device_class="distance"
+        ),
+        EUDASensor(
+            attr="short_term_average_electric_consumption",
+            name="Last short average electric consumption",
+            icon="mdi:car-battery",
+            unit="kWh/100km",
+            device_class="energy_distance"
+        ),
+        EUDASensor(
+            attr="short_term_average_fuel_consumption",
+            name="Last short average fuel consumption",
+            icon="mdi:fuel",
+            unit="l/100km",
+        ),
+        EUDASensor(
+            attr="short_term_duration",
+            name="Last short duration",
+            icon="mdi:clock",
+            unit="min",
+            device_class="duration"
+        ),
+        EUDASensor(
+            attr="short_term_distance",
+            name="Last short length",
+            icon="mdi:map-marker-distance",
+            unit="km",
+            device_class="distance"
+        ),
+        EUDABinarySensor(
+            attr="parking_brake",
+            name="Parking brake",
+            device_class="door",
+            icon="mdi:car-brake-parking"
+        ),
+    ]
+
 class Dashboard:
     def __init__(self, vehicle, **config):
         if vehicle._logPrefix!= None:
@@ -2169,5 +2447,15 @@ class Dashboard:
             for instrument in create_instruments()
             if instrument.setup(vehicle, **config)
         ]
+        if config.get('eudaVehicle', None)!= None:
+            vehicle = config.get('eudaVehicle', None)
+            eudaInstruments = [
+                instrument
+                for instrument in create_eudaInstruments()
+                if instrument.setup(vehicle, **config)
+            ]
+            for inst in eudaInstruments:
+                self.instruments.append(inst)
+
         self._LOGGER.debug("Supported instruments: " + ", ".join(str(inst.attr) for inst in self.instruments))
 

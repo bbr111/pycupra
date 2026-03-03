@@ -205,3 +205,65 @@ FIREBASE_STATUS_ACTIVATION_STOPPED= -3
 SUMTYPE_DAILY='daily'
 SUMTYPE_MONTHLY='monthly'
 
+# -------------------------------------------------------------------------------------------------------------------------------
+# For EUDA 
+
+EUDA_CLIENT_LIST = {
+    'CLIENT_ID': 'f85e5b69-e3b2-43aa-9c0d-1b7d0e0b576f@apps_vw-dilab_com',
+    'SCOPE': 'openid profile cars',
+    'REDIRECT_URL': 'https://eu-data-act.drivesomethinggreater.com/login',
+}
+
+EUDA_HEADERS_SESSION = {
+    'Connection': 'keep-alive',
+    'Content-Type': '*/*', #'application/json',
+    'Accept-charset': 'UTF-8',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',#'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0',#USER_AGENT_SEAT,
+    'Referer': 'https://eu-data-act.drivesomethinggreater.com/de/en/user.html',
+    #'User-ID': '?????', # to be set later
+    'Accept-Encoding': 'gzip, deflate, br, zstd', # to be deleted later!!!
+    'Accept-Language': 'de,en-US;q=0.7,en;q=0.3',
+}
+
+EUDA_HEADERS_AUTH = {
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'keep-alive',
+    'Referer': 'https://eu-data-act.drivesomethinggreater.com/de/en/login.html',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0',#USER_AGENT_SEAT,
+}
+
+
+EUDA_AUTH_OIDC = 'https://identity.vwgroup.io/oidc/v1/authorize' # Authorization endpoint for EUDA login
+EUDA_AUTH_ISSUER = 'https://identity.vwgroup.io' # Authorization issuer for EUDA login
+
+EUDA_BASE_URL = 'https://eu-data-act.drivesomethinggreater.com'
+EUDA_API_VEHICLES = '{baseurl}/proxy_api/consent/me/vehicles?viewPosition={viewPos}' # Endpoint to get vehicles
+EUDA_API_FILE_DOWNLOAD = '{baseurl}/proxy_api/euda-apim/datadelivery/vehicles/{vin}/{id}/download' # Endpoint to download a data file
+EUDA_API_FILE_LIST = '{baseurl}/proxy_api/euda-apim/datadelivery/vehicles/{vin}/{id}/list' # Endpoint to read a list of available files
+EUDA_API_DATACLUSTERS = '{baseurl}/proxy_api/euda-apim/datarequest/vehicles/{vin}/metadata/{type}' # Endpoint to read data cluster information
+EUDA_URL_DETAILS = '{baseurl}/content/euda/de/en/user/details?vin={vin}'
+
+EUDA_API_TOKEN = '{baseurl}/libs/granite/csrf/token.json'
+EUDA_API_PERMISSION_CHECK = '{baseurl}/services/permissioncheck'
+
+EUDA_SHORT_TERM_DATA_START_MILEAGE_KEY = 'ecd266dd-f536-39c2-a575-352216b87f39'
+EUDA_SHORT_TERM_DATA_MILEAGE_KEY = '9f55581a-4fa2-3570-9c9e-b80d210b9a42'
+EUDA_SHORT_TERM_DATA_TRAVEL_TIME_KEY = 'f0890c07-e62e-32dc-ab3b-80431f070b13'
+EUDA_SHORT_TERM_DATA_AVERAGE_ELECTR_ENGINE_CONSUMPTION_KEY = '3b1bdf91-8e59-333a-93ed-f8e5a980bc96'
+EUDA_SHORT_TERM_DATA_AVERAGE_FUEL_CONSUMPTION_KEY = 'a0ee824b-9a53-34ee-8107-3ed94684efa7'
+
+EUDA_LONG_TERM_DATA_START_MILEAGE_KEY = '2bfaa641-c972-3816-ae7c-73459bcd673d'
+EUDA_LONG_TERM_DATA_MILEAGE_KEY = 'f8eba56b-ee3f-3c48-b852-03c9b956053f'
+EUDA_LONG_TERM_DATA_TRAVEL_TIME_KEY = 'd2ad181b-511a-37d0-8109-e676e68c86b2'
+EUDA_LONG_TERM_DATA_AVERAGE_ELECTR_ENGINE_CONSUMPTION_KEY = '79f1709e-028d-3b3a-936e-bbef63b92969'
+EUDA_LONG_TERM_DATA_AVERAGE_FUEL_CONSUMPTION_KEY = 'df531c6f-8897-3236-a760-5975322e7021'
+EUDA_LONG_TERM_DATA_AVERAGE_SPEED_KEY = '77838f59-786a-36fa-b1d4-47217a9fb40e'
+
+EUDA_OUTSIDE_TEMPERATURE_KEY = '6810b781-e54a-35e8-af98-fcdefb54bac6'
+EUDA_PARKING_BRAKE_KEY = 'f8bbe94d-06e1-3311-bf8f-c0c99cc67d48'
+EUDA_OIL_LEVEL_ADDITIONAL_OIL_LEVEL_KEY = '78e92351-cf56-3c15-96d3-9b63d62ca618'
+EUDA_OIL_LEVEL_ACTUAL_LEVEL_KEY = 'a3368611-8c63-3b7d-9d19-148a464c7a7b'
+

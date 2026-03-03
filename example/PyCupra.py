@@ -18,6 +18,7 @@ if currentframe != None:
 
 try:
     from pycupra import Connection
+    from pycupra import EUDAConnection
 except ModuleNotFoundError as e:
     print(f"Unable to import library: {e}")
     sys.exit(1)
@@ -45,7 +46,7 @@ COMPONENTS = {
 
 RESOURCES = [
 		"adblue_level",
-        "adblue_range",
+		"adblue_range",
         "area_alarm",
 		"auxiliary_climatisation",
 		"battery_level",
@@ -148,7 +149,20 @@ RESOURCES = [
 		"window_closed_right_front",
 		"window_heater",
 		"windows_closed",
-        "seat_heating"
+        "seat_heating",
+
+        "outside_temperature",
+        "oil_level",
+        "parking_brake",
+        "long_term_distance",
+        "long_term_duration",
+        "long_term_average_speed",
+        "long_term_average_electric_consumption",
+        "long_term_average_fuel_consumption",
+        "short_term_distance",
+        "short_term_duration",
+        "short_term_average_electric_consumption",
+        "short_term_average_fuel_consumption",
 ]
 
 def is_enabled(attr):
@@ -496,7 +510,7 @@ async def main():
         print('######################################################')
         print(f"Initiating new session to Cupra/Seat Cloud with {credentials.get('username')} as username")
         #connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False, anonymise=True, tripStatisticsStartDate='1970-01-01', logPrefix='1')
-        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False, anonymise=True)
+        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False, anonymise=False)
         print("Attempting to login to the Seat Cloud service")
         print(datetime.now())
         if await connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH, apiKey=credentials.get('apiKey',None)):
@@ -512,21 +526,66 @@ async def main():
             print('Fetching vehicles associated with account.')
             await connection.get_vehicles()
 
+            eudaRunning = False
+            if credentials.get('useEudaFiles',False):
+                eudaSession= ClientSession(headers={'Connection': 'keep-alive'})
+                print('')
+                print(f"Initiating new session to EU Data Act portal with {credentials.get('username')} as username")
+                eudaConnection = EUDAConnection(eudaSession, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, anonymise=False, logPrefix='')
+                print("Attempting to login")
+                print(datetime.now())
+                eudaRunning = await eudaConnection.doLogin()
+                if eudaRunning:
+                    print('Login or token refresh success!')
+                    print(datetime.now())
+
+                    print('Fetching basic information for account, especially vehicle.')
+                    await eudaConnection.getVehicles()
+
+                    loop = asyncio.get_running_loop()
+                    if not await loop.run_in_executor(None, eudaConnection.readTripStatisticsFile):
+                        _LOGGER.warning('readTripStatisticsFile was not successful. Is there no file? Ignoring this problem.')
+
+                    print('Looking for new data files on the EUDA portal.')
+                    if not await eudaConnection.update():
+                        _LOGGER.warning('Call update() was not successful.')
+            else:
+                print('')
+                print(f"Option 'useEudaFiles' in credentials file is missing or 'False'. Therefore no new session to EU Data Act portal is opened.")
+                
+
             instruments = set()
             for vehicle in connection.vehicles:
+                eudaVehicle = None
+                if eudaRunning:
+                    eudaVehicle= eudaConnection.vehicle(vehicle.vin)
+                    if eudaVehicle==None:
+                        _LOGGER.debug(f'Vehicle {vehicle.vin} is not a valid vehicle for the EUDA portal.')
+                    _LOGGER.debug(f'Vehicle brand={vehicle.brand} model={vehicle.model}.')
+                    _LOGGER.debug(f'Vehicle brand={eudaVehicle.brand} model={eudaVehicle.model}.')
+
                 txt = vehicle.vin
-                if vehicle == connection.vehicles[0]: # Firebase can only be activated for one vehicle. So we use it for the first one
+                if vehicle == connection.vehicles[0] and credentials.get('usePushNotifications',False): # Firebase can only be activated for one vehicle. So we use it for the first one
                     newStatus = await vehicle.initialiseFirebase(FIREBASE_CREDENTIALS_FILE_NAME_AND_PATH, vehicle.update)
                     print('########################################')
                     print('#      Initialisation of firebase      #')
                     print(txt.center(40, '#'))
                     print(f"New status of firebase={newStatus}")
+                elif not credentials.get('usePushNotifications',False):
+                    print('')
+                    print(f"Option 'usePushNotifications' in credentials file is missing or 'False'. Therefore firebase is not initialised.")
+                else:
+                    print('')
+                    print(f"Firebase can only be activated for one vehicle. Current vehicle is not vehicle[0]. Therefore firebase is not initialised.")
 
                 print('')
                 print('########################################')
                 print('#         Setting up dashboard         #')
                 print(txt.center(40, '#'))
-                dashboard = vehicle.dashboard(mutable=True)
+                if eudaVehicle== None:
+                    dashboard = vehicle.dashboard(mutable=True)
+                else:
+                    dashboard = vehicle.dashboard(mutable=True, eudaVehicle=eudaVehicle)
 
                 """for instrument in (
                         instrument
@@ -559,6 +618,21 @@ async def main():
                             print(f"\t\t{prop} - {typ}")
                         except:
                             pass
+                if eudaRunning:
+                    eudaVehicle= eudaConnection.vehicle(vehicle.vin)
+                    if eudaVehicle==None:
+                        _LOGGER.debug(f'Vehicle {vehicle.vin} is not a valid vehicle for the EUDA portal.')
+                    else:
+                        print(f"\tEUDAVehicle attributes, and methods:")
+                        for prop in dir(eudaVehicle):
+                            if not "__" in prop:
+                                try:
+                                    func = f"eudaVehicle.{prop}"
+                                    typ = type(eval(func))
+                                    print(f"\t\t{prop} - {typ}")
+                                except:
+                                    pass
+
 
         else:
             return False

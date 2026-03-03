@@ -70,7 +70,7 @@ async def main():
         print('# Logging on to ola.prod.code.seat.cloud.vwgroup.com #')
         print('######################################################')
         print(f"Initiating new session to Cupra/Seat Cloud with {credentials.get('username')} as username")
-        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False, anonymise=True)
+        connection = Connection(session, BRAND, credentials.get('username'), credentials.get('password'), PRINTRESPONSE, nightlyUpdateReduction=False, anonymise=False)
         print("Attempting to login to the Seat Cloud service")
         if await connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH, apiKey=credentials.get('apiKey',None)):
             print('Login or token refresh success!')

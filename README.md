@@ -21,6 +21,8 @@ Retrieve statistics about your Cupra/Seat from the Cupra/Seat Connect online ser
 
 - PyCupra can ask the Seat/Cupra portal to send push notifications to PyCupra if the charging status or the climatisation status has changed or when the API has finished a request like lock or unlock vehicle, start or stop charging or change departure timers or ....
 
+- PyCupra read files form the EUDA portal of VW group, if the user has registered there and set up an ongoing data request. (This is still experimental.)
+
 ## Thanks to
 
 - [RobinostLund](https://github.com/robinostlund/volkswagencarnet) for initial project for Volkswagen Carnet I was able to fork
