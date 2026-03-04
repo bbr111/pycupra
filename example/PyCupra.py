@@ -99,6 +99,8 @@ RESOURCES = [
 		"last_full_update",
 		"last_known_position",
 		"lock_action_status",
+        "model_image_large",
+        "model_image_small",
 		"oil_inspection",
 		"oil_inspection_distance",
 		"outside_temperature",

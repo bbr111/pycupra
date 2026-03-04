@@ -155,8 +155,15 @@ class Vehicle:
         else:
             self._LOGGER.warning(f"No capabilities information stored for vehicle with VIN {self.vin}")
        
-        # Get URLs for model image
-        self._modelimages = await self.get_modelimageurl()
+        # Get model images
+        data = await self.get_modelimageurl()
+        if data:
+            self._modelimages = data
+        else:
+            if self._modelimages:
+                self._LOGGER.debug('Could not refetch vehicle images. Keeping the old ones.')
+            else:
+                self._LOGGER.warning('Could not fetch vehicle images.')
         # Read daily and monthly sum files if first callo of discover() and vehicle has capability 'tripStatistics'
         if not self._discovered and self._relevantCapabilties.get('tripStatistics', {}).get('active', False):
             loop = asyncio.get_running_loop()

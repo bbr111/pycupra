@@ -60,7 +60,7 @@ class Instrument:
         if hasattr(self.vehicle, self.attr):
             return getattr(self.vehicle, self.attr)
         else:
-            self._LOGGER.debug(f'Could not find attribute "{self.attr}"')
+            self._LOGGER.warning(f'Could not find attribute "{self.attr}"')
         return self.vehicle.get_attr(self.attr)
 
     @property

@@ -59,11 +59,15 @@ def find_path(src, path):
     KeyError: 'c'
 
     """
-    if not path:
-        return src
-    if isinstance(path, str):
-        path = path.split(".")
-    return find_path(src[path[0]], path[1:])
+    try:
+        if not path:
+            return src
+        if isinstance(path, str):
+            path = path.split(".")
+        return find_path(src[path[0]], path[1:])
+    except Exception as e:
+        _LOGGER.error(f"Error {e} in find_path for path={path}. Function returns '' and continues.")
+    return ""
 
 
 def is_valid_path(src, path) -> bool:
