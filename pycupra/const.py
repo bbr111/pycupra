@@ -205,9 +205,6 @@ FIREBASE_STATUS_ACTIVATION_STOPPED= -3
 SUMTYPE_DAILY='daily'
 SUMTYPE_MONTHLY='monthly'
 
-# -------------------------------------------------------------------------------------------------------------------------------
-# For EUDA 
-
 EUDA_CLIENT_LIST = {
     'CLIENT_ID': 'f85e5b69-e3b2-43aa-9c0d-1b7d0e0b576f@apps_vw-dilab_com',
     'SCOPE': 'openid profile cars',
